@@ -1,0 +1,9 @@
+{
+  "name": "sunworld-command-center",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sunworld Project Command Center — MD dashboard MVP (Clickfield AI)",
+  "scripts": {
+    "start": "node server.js"
+  }
+}

@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sunworld — Command Center</title>
+<style>
+  :root{
+    --bg:#faf7f1; --surface:#ffffff; --surface2:#faf8f4; --surface3:#f1ece3;
+    --border:#e8e3d9; --border-soft:#f0ece4;
+    --text:#1c1c1c; --muted:#5f5a52; --dim:#a39c90;
+    --brand-yellow:#FFD100; --brand-ink:#1c1c1c; --brand-orange:#A63C06;
+    --accent:#E4610F; --accent2:#c24e0b;
+    --blue:#2563eb; --blue-bg:rgba(37,99,235,.1);
+    --green:#0f9d58; --green-bg:rgba(15,157,88,.12);
+    --amber:#d97706; --amber-bg:rgba(217,119,6,.13);
+    --violet:#7048c4; --violet-bg:rgba(112,72,196,.11);
+    --rose:#e11d63; --rose-bg:rgba(225,29,99,.1);
+    --teal:#0d9488; --teal-bg:rgba(13,148,136,.11);
+    --shadow:0 1px 2px rgba(16,24,40,.04),0 2px 6px rgba(16,24,40,.06);
+    --mono:'SF Mono',ui-monospace,'Menlo',monospace;
+    --sans:ui-sans-serif,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{min-height:100dvh;background:var(--bg);color:var(--text);font-family:var(--sans);-webkit-font-smoothing:antialiased;font-size:14px}
+
+  /* top bar */
+  .topbar{display:flex;align-items:center;gap:14px;padding:12px 30px;background:var(--brand-yellow);border-bottom:3px solid var(--brand-ink);position:sticky;top:0;z-index:10}
+  .brand{display:flex;align-items:center;gap:12px}
+  .brand-logo{height:46px;width:auto;display:block}
+  .who{margin-left:auto;display:flex;align-items:center;gap:10px}
+  .avatar{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#E4610F,#c24e0b);display:grid;place-items:center;font-weight:700;font-size:12px;color:#fff}
+  .who .n b{font-size:12.5px;font-weight:700;display:block;line-height:1.1;color:#1c1c1c}
+  .who .n small{font-size:10.5px;color:#6b5a2e}
+  .tbtn{font-family:var(--sans);font-size:11.5px;font-weight:600;padding:7px 12px;border-radius:8px;border:1px solid rgba(0,0,0,.2);background:rgba(255,255,255,.6);color:#1c1c1c;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+  .tbtn:hover{background:#fff;border-color:rgba(0,0,0,.38)}
+  .tbtn svg{width:14px;height:14px}
+
+  .wrap{max-width:1120px;margin:0 auto;padding:34px 30px 60px}
+  .view{display:none;animation:fade .3s ease}
+  .view.on{display:block}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+  /* dashboard heading */
+  .head h2{font-size:24px;font-weight:700;letter-spacing:-.03em}
+  .head p{color:var(--muted);font-size:13.5px;margin-top:5px}
+  .head{margin-bottom:26px}
+
+  /* 6 service blocks */
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:18px}
+  @media(max-width:900px){.grid{grid-template-columns:1fr 1fr}}
+  @media(max-width:600px){.grid{grid-template-columns:1fr}}
+  .block{background:var(--surface);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow);padding:24px;cursor:pointer;transition:transform .14s,box-shadow .2s,border-color .2s;min-height:172px;display:flex;flex-direction:column}
+  .block:hover{transform:translateY(-3px);box-shadow:0 14px 32px rgba(16,24,40,.11);border-color:#cfd6de}
+  .block:active{transform:translateY(-1px) scale(.995)}
+  .b-ic{width:52px;height:52px;border-radius:13px;display:grid;place-items:center;margin-bottom:16px}
+  .b-ic svg{width:27px;height:27px}
+  .block b{font-size:16px;font-weight:700;letter-spacing:-.01em;line-height:1.25}
+  .block p{font-size:12px;color:var(--muted);margin-top:6px;line-height:1.5}
+  .b-go{margin-top:auto;padding-top:14px;font-size:12px;font-weight:600;color:var(--accent);display:inline-flex;align-items:center;gap:6px}
+  .b-go svg{width:15px;height:15px}
+
+  /* inside a service */
+  .crumb{display:inline-flex;align-items:center;gap:7px;font-size:12.5px;color:var(--muted);cursor:pointer;font-weight:500;margin-bottom:20px}
+  .crumb:hover{color:var(--accent)}
+  .crumb svg{width:15px;height:15px}
+  .svc-hero{display:flex;align-items:center;gap:18px}
+  .svc-hero .h-ic{width:60px;height:60px;border-radius:15px;display:grid;place-items:center;flex-shrink:0}
+  .svc-hero .h-ic svg{width:31px;height:31px}
+  .svc-hero h2{font-size:26px;font-weight:700;letter-spacing:-.03em}
+  .svc-hero .d{color:var(--muted);font-size:13.5px;margin-top:6px;max-width:66ch;line-height:1.55}
+  .inside-note{margin-top:30px;background:var(--surface);border:1px dashed var(--border);border-radius:12px;padding:34px;text-align:center;color:var(--dim)}
+  .inside-note svg{width:34px;height:34px;opacity:.5;margin-bottom:12px}
+  .inside-note b{display:block;color:var(--muted);font-size:14px;font-weight:600;margin-bottom:4px}
+  .inside-note span{font-size:12.5px}
+
+  /* clients list inside a service */
+  .clients-head{display:flex;align-items:baseline;justify-content:space-between;margin:28px 2px 14px}
+  .clients-head h3{font-size:16px;font-weight:700;letter-spacing:-.02em}
+  .clients-head span{font-size:12px;color:var(--dim)}
+  .clients-head .cnt{margin-right:10px}
+  .sample-tag{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:600;color:#b08900;background:rgba(255,209,0,.18);border:1px solid rgba(176,137,0,.35);padding:2px 9px;border-radius:20px;vertical-align:middle}
+  .sample-tag i{width:6px;height:6px;border-radius:50%;background:#d9a400;display:inline-block}
+  .clients{display:flex;flex-direction:column;gap:10px}
+  .client{display:flex;align-items:center;gap:14px;background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow);padding:15px 18px;transition:transform .12s,box-shadow .2s,border-color .2s;cursor:pointer}
+  .client:hover{transform:translateY(-1px);box-shadow:0 8px 20px rgba(16,24,40,.09);border-color:#cfd6de}
+  .cl-av{width:44px;height:44px;border-radius:11px;display:grid;place-items:center;font-weight:800;font-size:17px;flex-shrink:0}
+  .cl-main{flex:1;min-width:0}
+  .cl-main b{font-size:14.5px;font-weight:700;letter-spacing:-.01em;display:block}
+  .cl-main p{font-size:12px;color:var(--muted);margin-top:3px;display:flex;align-items:center;gap:6px}
+  .cl-main p svg{width:13px;height:13px;color:var(--dim);flex-shrink:0}
+  .cl-right{text-align:right;flex-shrink:0;display:flex;align-items:center;gap:20px}
+  .cl-val{font-family:var(--mono);font-size:14px;font-weight:700;letter-spacing:-.02em}
+  .cl-status{font-size:11.5px;font-weight:600;display:inline-flex;align-items:center;gap:6px;min-width:78px;justify-content:flex-end}
+  .cl-status .dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+  .cl-go{color:var(--dim);flex-shrink:0}
+  .cl-go svg{width:17px;height:17px}
+  @media(max-width:600px){.cl-right{gap:10px}.cl-val{display:none}}
+
+  /* client / project tracking detail */
+  .client-hero{background:var(--surface);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow);padding:22px;margin-bottom:18px}
+  .ch-top{display:flex;align-items:center;gap:16px}
+  .ch-name{flex:1;min-width:0}
+  .ch-name h2{font-size:22px;font-weight:800;letter-spacing:-.03em}
+  .ch-name p{font-size:12.5px;color:var(--muted);margin-top:4px;display:flex;align-items:center;gap:6px}
+  .ch-name p svg{width:14px;height:14px;color:var(--dim);flex-shrink:0}
+  .ch-facts{display:flex;flex-wrap:wrap;gap:26px;margin-top:20px;padding-top:18px;border-top:1px solid var(--border-soft)}
+  .ch-facts div span{font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.07em;font-weight:600}
+  .ch-facts div b{display:block;font-size:13.5px;font-weight:700;margin-top:3px}
+  .ch-facts .mono b{font-family:var(--mono)}
+  .ch-note{margin-top:16px;background:rgba(217,119,6,.1);border:1px solid rgba(217,119,6,.28);color:#9c5406;border-radius:10px;padding:11px 14px;font-size:12.5px;font-weight:500;display:flex;align-items:center;gap:9px}
+  .ch-note svg{width:16px;height:16px;flex-shrink:0}
+  .track-head{display:flex;align-items:baseline;justify-content:space-between;margin:6px 2px 16px}
+  .track-head h3{font-size:16px;font-weight:700;letter-spacing:-.02em}
+  .track-head span{font-size:12px;color:var(--dim)}
+  .tracker{background:var(--surface);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow);padding:24px 26px}
+  .tstep{position:relative;padding-left:34px;padding-bottom:22px}
+  .tstep:last-child{padding-bottom:0}
+  .tstep::before{content:'';position:absolute;left:11px;top:3px;bottom:-3px;width:2px;background:var(--border)}
+  .tstep:last-child::before{display:none}
+  .tstep.done::before{background:var(--green)}
+  .tnode{position:absolute;left:2px;top:0;width:22px;height:22px;border-radius:50%;background:var(--surface3);border:2px solid var(--border);display:grid;place-items:center;z-index:1}
+  .tnode svg{width:12px;height:12px}
+  .tstep.done .tnode{background:var(--green);border-color:var(--green)}
+  .tstep.current .tnode{background:var(--accent);border-color:var(--accent);box-shadow:0 0 0 4px rgba(228,97,15,.16)}
+  .pulse{width:7px;height:7px;border-radius:50%;background:#fff}
+  .tbody b{font-size:13.5px;font-weight:700}
+  .tstep.todo .tbody b{color:var(--dim);font-weight:600}
+  .nowtag{margin-left:8px;font-size:10px;font-weight:700;color:var(--accent);background:rgba(228,97,15,.12);padding:1px 8px;border-radius:20px;vertical-align:middle}
+  .substeps{margin-top:11px;display:flex;flex-wrap:wrap;gap:6px}
+  .substep{font-size:10.5px;padding:3px 10px;border-radius:20px;background:var(--surface3);color:var(--muted);font-weight:500}
+  .substep.d{background:rgba(15,157,88,.13);color:var(--green)}
+  .substep.a{background:rgba(228,97,15,.13);color:var(--accent);font-weight:700}
+
+  /* live team updates feed (MD warehouse view) */
+  .updates{background:var(--surface);border:1px solid var(--border);border-radius:13px;box-shadow:var(--shadow);padding:16px 18px;margin-bottom:18px}
+  .updates-h{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+  .updates-h .live{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;font-weight:700}
+  .updates-h .live i{width:8px;height:8px;border-radius:50%;background:var(--green);animation:lp 1.8s infinite}
+  @keyframes lp{0%{box-shadow:0 0 0 0 rgba(15,157,88,.45)}70%{box-shadow:0 0 0 7px rgba(15,157,88,0)}100%{box-shadow:0 0 0 0 rgba(15,157,88,0)}}
+  .updates-h .up-hint{font-size:11px;color:var(--dim)}
+  .up{display:flex;gap:11px;padding:9px 0;border-top:1px solid var(--border-soft)}
+  .up:first-of-type{border-top:none}
+  .up-dot{width:7px;height:7px;border-radius:50%;background:var(--accent);margin-top:6px;flex-shrink:0}
+  .up-txt{font-size:12.5px;color:var(--text);line-height:1.45}
+  .up-time{font-size:10.5px;color:var(--dim);margin-top:2px;font-family:var(--mono)}
+  .up-empty{font-size:12px;color:var(--dim);padding:6px 0;line-height:1.5}
+
+  /* project detail panels (materials / payments / documents) */
+  .panel{background:var(--surface);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow);overflow:hidden;margin-bottom:6px}
+  .prow{display:flex;align-items:center;gap:13px;padding:12px 20px;border-bottom:1px solid var(--border-soft);font-size:12.5px}
+  .prow:last-child{border-bottom:none}
+  .prow .pi{width:32px;height:32px;border-radius:8px;background:var(--surface3);display:grid;place-items:center;flex-shrink:0;color:var(--muted)}
+  .prow .pi svg{width:16px;height:16px}
+  .prow .pn{flex:1;font-weight:600;min-width:0}
+  .prow .pn small{display:block;color:var(--dim);font-weight:400;font-size:11px;margin-top:1px}
+  .prow .pamt{font-family:var(--mono);font-weight:700;font-size:12.5px;margin-right:2px}
+  .pstat{font-size:10.5px;font-weight:700;padding:2px 10px;border-radius:20px;white-space:nowrap}
+  .ps-green{background:rgba(15,157,88,.13);color:var(--green)}
+  .ps-amber{background:rgba(217,119,6,.14);color:var(--amber)}
+  .ps-blue{background:rgba(37,99,235,.1);color:#2563eb}
+  .ps-grey{background:var(--surface3);color:var(--dim)}
+  .prow.pending{opacity:.55}
+  .tdoc{font-size:11.5px;color:var(--muted);margin-top:5px;line-height:1.5;max-width:76ch}
+  .tstep.todo .tdoc{color:var(--dim)}
+  .doc-group-lab{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:var(--dim);margin:16px 2px 8px}
+  .doc-view{font-size:11px;font-weight:600;color:var(--accent);cursor:pointer;margin-right:2px}
+  .doc-view:hover{text-decoration:underline}
+
+  /* MD overview (home roll-up) */
+  .ov-kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px}
+  .ov-kpi{background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:var(--shadow);padding:15px 16px}
+  .ov-kpi .kv{font-family:var(--mono);font-size:22px;font-weight:800;letter-spacing:-.02em;line-height:1}
+  .ov-kpi .kl{font-size:11.5px;color:var(--muted);margin-top:8px;line-height:1.3}
+  .ov-cols{display:grid;grid-template-columns:1.4fr 1fr;gap:16px;margin-bottom:30px}
+  .ov-card{background:var(--surface);border:1px solid var(--border);border-radius:13px;box-shadow:var(--shadow);overflow:hidden}
+  .ov-card .oh{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border-soft)}
+  .ov-card .oh h3{font-size:13.5px;font-weight:700;display:flex;align-items:center;gap:8px}
+  .ov-card .oh .cnt{font-size:11.5px;color:var(--dim);font-family:var(--mono);font-weight:700}
+  .ad{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+  .att{display:flex;gap:12px;padding:12px 18px;border-bottom:1px solid var(--border-soft);cursor:pointer;transition:background .12s}
+  .att:last-child{border-bottom:none}
+  .att:hover{background:var(--surface2)}
+  .att .ad{margin-top:5px}
+  .att .am{flex:1;min-width:0}
+  .att .am b{font-size:12.5px;font-weight:600}
+  .att .am p{font-size:11.5px;color:var(--muted);margin-top:2px;line-height:1.4}
+  .att .asvc{font-size:10px;color:var(--dim);margin-top:3px;text-transform:uppercase;letter-spacing:.05em}
+  .rec{display:flex;align-items:center;gap:10px;padding:11px 18px;border-bottom:1px solid var(--border-soft);font-size:12.5px}
+  .rec:last-child{border-bottom:none}
+  .rec .rn{flex:1;font-weight:600;min-width:0}
+  .rec .rn small{display:block;color:var(--dim);font-weight:400;font-size:11px;margin-top:1px}
+  .rec .ra{font-family:var(--mono);font-weight:700}
+  .ov-lab{font-size:13px;font-weight:700;letter-spacing:-.01em;color:var(--muted);margin:6px 2px 12px}
+  @media(max-width:1000px){.ov-kpis{grid-template-columns:repeat(2,1fr)}.ov-cols{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <div class="brand">
+      <img src="/logo.png" alt="Sunworld Construction Engineering" class="brand-logo">
+    </div>
+    <div class="who">
+      <button class="tbtn" onclick="resetDemo()" title="Reset the warehouse demo"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg> Reset</button>
+      <div class="avatar">MD</div>
+      <div class="n"><b>Managing Director</b></div>
+      <button class="tbtn" onclick="logout()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5M21 12H9"/></svg> Log out</button>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <!-- DASHBOARD: 6 service blocks -->
+    <section class="view on" id="view-dash">
+      <div class="head">
+        <h2>Company overview</h2>
+        <p>Where Sunworld stands today — across every service.</p>
+      </div>
+      <div id="mdOverview"></div>
+
+      <div class="ov-lab">Your Services</div>
+      <div class="grid" id="grid"></div>
+    </section>
+
+    <!-- INSIDE a service -->
+    <section class="view" id="view-service">
+      <div id="serviceBody"></div>
+    </section>
+  </div>
+
+<script>
+function icon(p,stroke='currentColor',w=2){return `<svg viewBox="0 0 24 24" fill="none" stroke="${stroke}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`}
+const arrow='<path d="M5 12h14M12 5l7 7-7 7"/>';
+const back='<path d="M19 12H5M12 19l-7-7 7-7"/>';
+
+/* Sunworld's 6 services */
+const SERVICES = [
+  {id:'warehouse', name:'Warehouse Construction', col:'var(--blue)', bg:'var(--blue-bg)',
+   ico:'<path d="M3 21V8l9-4 9 4v13"/><path d="M3 21h18"/><path d="M8 21v-6h8v6"/><path d="M8 12h8"/>',
+   desc:'Large-span storage and distribution warehouses and cold stores.'},
+  {id:'industrial', name:'Industrial Construction', col:'var(--violet)', bg:'var(--violet-bg)',
+   ico:'<path d="M3 21h18V10l-6 4v-4l-6 4V6H3z"/><path d="M8 21v-4M12 21v-4M16 21v-4"/>',
+   desc:'Turnkey industrial buildings, process units and civil works.'},
+  {id:'pfis', name:'Pre-Fabricated Industrial Shed', col:'var(--amber)', bg:'var(--amber-bg)',
+   ico:'<path d="M2 21V12l10-6 10 6v9"/><path d="M2 21h20"/><path d="M9 21v-6h6v6"/>',
+   desc:'Pre-engineered industrial sheds with fast-track erection.'},
+  {id:'pffs', name:'Pre-Fabricated Factory Shed', col:'var(--green)', bg:'var(--green-bg)',
+   ico:'<path d="M2 21V13l6-4 6 4v8"/><path d="M14 21V10l6-3v14"/><path d="M2 21h20"/>',
+   desc:'Factory sheds built from prefabricated steel structures.'},
+  {id:'peb', name:'PEB Steel Building Construction', col:'var(--teal)', bg:'var(--teal-bg)',
+   ico:'<path d="M4 21V7l8-4 8 4v14"/><path d="M4 11h16"/><path d="M9 21v-6h6v6"/>',
+   desc:'Pre-engineered steel buildings — columns, rafters, cladding.'},
+  {id:'epoxy', name:'Epoxy Flooring', col:'var(--rose)', bg:'var(--rose-bg)',
+   ico:'<rect x="3" y="3" width="18" height="18" rx="1"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/>',
+   desc:'Industrial epoxy floor systems — surface prep to top coat.'},
+];
+const svcById = id => SERVICES.find(s=>s.id===id);
+
+/* health tags */
+const HEALTH = {
+  ok:  {c:'var(--green)', t:'On track'},
+  warn:{c:'var(--amber)', t:'Attention'},
+  late:{c:'#dc2626',      t:'Delayed'},
+};
+const pin = '<path d="M12 21s7-6.3 7-11a7 7 0 1 0-14 0c0 4.7 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/>';
+const warnI = '<path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>';
+
+/* the 10-stage lifecycle, plus the two execution sub-stage sets */
+const STAGES = ['Enquiry & Survey','Quotation','Work Order','Drawings','Procurement','Site Execution','Quality / QC','Client Update','Invoicing','Handover'];
+const STAGE_DOC = [
+  'Initial meeting to understand the client\'s concept for the work. Key information is captured — site survey, existing plans and requirements — and a Job ID is generated.',
+  'From the client\'s brief and our ideas we prepare proposal and concept design options. Project scope, budget and individual requirements are established, and a cost estimate (BOQ) is prepared.',
+  'The approved proposal is converted into a Work Order — scope, quantity, delivery date and site team assigned. Every department works from this single Work Order.',
+  'Developing design: concept design is developed through floor plans, perspective sketches and renderings, then advanced to detailed design — construction details, materials, components, systems and finishes. Every revision (R0, R1, R2) is tracked and client-approved.',
+  'Raw materials are sourced against the BOQ — steel, roof sheeting, cladding, MEP — with purchase orders raised and deliveries tracked to site.',
+  'Construction runs on site through the build sequence: foundation → column & beam erection → roofing → cladding → MEP → flooring → finishing, updated by the site engineers.',
+  'Quality inspections and checklists run at each stage; inspection reports are recorded and client sign-off is captured before the next stage begins.',
+  'A structured progress summary is generated and shared with the client at each milestone.',
+  'Stage-wise billing is raised as milestones complete — mobilization advance, foundation, structure and completion.',
+  'As-built drawings, completion certificate, warranty and test certificates are bundled and handed over to the client.',
+];
+const STEEL_SUB = ['Foundation','Column & Beam Erection','Roof Purlin & Sheeting','Wall Cladding','MEP Rough-in','Flooring','Finishing & Handover'];
+const EPOXY_SUB = ['Surface Preparation','Primer Coat','Base Coat','Top Coat','Cure & Inspection','Handover'];
+
+/* clients under each service */
+const CLIENTS = {
+  warehouse:[
+    {name:'Vellore Logistics Park',        site:'Ranipet, TN',       tag:'Warehouse · 42,000 sq ft', val:'₹1.85 Cr', status:'warn', id:'SW-2026-014', stage:6, sub:2, pct:52, team:'Team B — Karthik R.', start:'04 Apr 2026', delivery:'12 Aug 2026', note:'Drawing R2 approved, but site is building to R1 — resolve before wall cladding.'},
+    {name:'Sri Balaji Warehousing',        site:'Hosur, TN',         tag:'Warehouse · 60,000 sq ft', val:'₹3.10 Cr', status:'late', id:'SW-2026-005', stage:6, sub:5, pct:74, team:'Team A — Suresh M.', start:'02 Feb 2026', delivery:'30 Jun 2026', note:'4 days behind on Flooring sub-stage — delivery date at risk.'},
+    {name:'Metro Fresh Distribution',      site:'Chennai, TN',       tag:'Cold-storage warehouse',   val:'₹2.75 Cr', status:'ok',   id:'SW-2026-002', stage:9, sub:0, pct:92, team:'Team A — Suresh M.', start:'12 Jan 2026', delivery:'20 Jun 2026'},
+    {name:'Aditya Pharma Godown',          site:'Sriperumbudur, TN', tag:'Pharma warehouse',         val:'₹2.10 Cr', status:'ok',   id:'SW-2026-001', stage:10, sub:0, pct:100, team:'Team A — Suresh M.', start:'05 Jan 2026', delivery:'Handed over'},
+    {name:'Rasi Seeds Storage Warehouse',  site:'Attur, TN',         tag:'Seed-storage warehouse',   val:'₹1.45 Cr', status:'ok',   id:'SW-2026-034', stage:2, sub:0, pct:8, team:'Unassigned', start:'30 Jun 2026', delivery:'22 Dec 2026'},
+  ],
+  industrial:[
+    {name:'Nandhini Foods Pack Unit',      site:'Namakkal, TN',      tag:'Food processing unit',     val:'₹1.20 Cr', status:'ok',   id:'SW-2026-025', stage:3, sub:0, pct:12, team:'Team B — Karthik R.', start:'25 Jun 2026', delivery:'18 Nov 2026'},
+    {name:'Ashok Leyland Ancillary Unit',  site:'Hosur, TN',         tag:'Auto-ancillary plant',     val:'₹3.90 Cr', status:'ok',   id:'SW-2026-030', stage:6, sub:1, pct:44, team:'Team A — Suresh M.', start:'10 Mar 2026', delivery:'14 Oct 2026'},
+    {name:'Sakthi Sugars Boiler House',    site:'Sankagiri, TN',     tag:'Process civil works',      val:'₹2.05 Cr', status:'warn', id:'SW-2026-036', stage:5, sub:0, pct:26, team:'Team C — Manoj V.', start:'12 May 2026', delivery:'20 Jan 2027', note:'Awaiting structural steel delivery before erection.'},
+  ],
+  pfis:[
+    {name:'GreenLeaf Agro Sheds',          site:'Salem, TN',         tag:'Agro industrial shed',     val:'₹58.0 L',  status:'warn', id:'SW-2026-018', stage:5, sub:0, pct:30, team:'Team C — Manoj V.', start:'28 Apr 2026', delivery:'15 Aug 2026', note:'Purlin steel (critical) not yet received — site on hold.'},
+    {name:'Suguna Poultry Feed Shed',      site:'Udumalpet, TN',     tag:'Poultry feed shed',        val:'₹76.0 L',  status:'ok',   id:'SW-2026-032', stage:3, sub:0, pct:15, team:'Team C — Manoj V.', start:'18 Jun 2026', delivery:'02 Dec 2026'},
+  ],
+  pffs:[
+    {name:'Coromandel Steel Yard',         site:'Cuddalore, TN',     tag:'Factory shed',             val:'₹72.0 L',  status:'ok',   id:'SW-2026-011', stage:6, sub:4, pct:55, team:'Team C — Manoj V.', start:'20 Mar 2026', delivery:'09 Sep 2026'},
+    {name:'Lakshmi Machine Works Bay',     site:'Coimbatore, TN',    tag:'Machining bay shed',       val:'₹1.28 Cr', status:'ok',   id:'SW-2026-033', stage:7, sub:0, pct:70, team:'Team B — Karthik R.', start:'01 Feb 2026', delivery:'08 Aug 2026'},
+  ],
+  peb:[
+    {name:'Anand Dairy Cold Store',        site:'Erode, TN',         tag:'PEB cold store',           val:'₹2.40 Cr', status:'ok',   id:'SW-2026-009', stage:7, sub:0, pct:68, team:'Team A — Suresh M.', start:'11 Mar 2026', delivery:'28 Sep 2026'},
+    {name:'JK Cement Bagging Plant',       site:'Ariyalur, TN',      tag:'PEB bagging plant',        val:'₹4.20 Cr', status:'warn', id:'SW-2026-031', stage:4, sub:0, pct:22, team:'Team B — Karthik R.', start:'05 Jun 2026', delivery:'25 Jan 2027', note:'Structural GA drawing R1 awaiting client approval.'},
+  ],
+  epoxy:[
+    {name:'Kovai Textiles Unit-3',         site:'Tirupur, TN',       tag:'Epoxy floor · 18,000 sq ft', val:'₹34.0 L', status:'ok',   id:'SW-2026-021', stage:6, sub:2, pct:41, team:'Team D — Praveen K.', start:'19 May 2026', delivery:'22 Jul 2026'},
+    {name:'Deccan Auto Components',        site:'Krishnagiri, TN',   tag:'Epoxy floor · 6,800 sq ft',  val:'₹41.0 L', status:'warn', id:'SW-2026-023', stage:4, sub:0, pct:18, team:'Team D — Praveen K.', start:'01 Jun 2026', delivery:'05 Oct 2026', note:'Floor drawing R1 awaiting client approval for 6 days.'},
+    {name:'PVR Logistics Epoxy Bay',       site:'Sriperumbudur, TN', tag:'Epoxy bay flooring',         val:'₹52.0 L', status:'ok',   id:'SW-2026-035', stage:6, sub:3, pct:63, team:'Team D — Praveen K.', start:'08 Apr 2026', delivery:'19 Jul 2026'},
+  ],
+};
+
+/* render the 6 blocks */
+function renderGrid(){
+  document.getElementById('grid').innerHTML = SERVICES.map(s=>`
+    <div class="block" onclick="openService('${s.id}')">
+      <div class="b-ic" style="background:${s.bg}">${icon(s.ico,s.col,2)}</div>
+      <b>${s.name}</b>
+      <p>${s.desc}</p>
+      <span class="b-go">Go inside ${icon(arrow,'currentColor',2)}</span>
+    </div>`).join('');
+}
+
+/* live warehouse data (fed by the team logins) */
+let WHDATA = {projects:[], updates:[]};
+let whPoll = null, whView = null, whClientIdx = null;
+async function loadWH(){
+  const r = await fetch('/api/warehouse');
+  if(r.status===401){ location.href='/login'; return; }
+  if(r.ok) WHDATA = await r.json();
+}
+function timeAgo(ts){
+  const s=Math.floor((Date.now()-ts)/1000);
+  if(s<60) return s+'s ago';
+  const m=Math.floor(s/60); if(m<60) return m+'m ago';
+  const h=Math.floor(m/60); if(h<24) return h+'h ago';
+  return Math.floor(h/24)+'d ago';
+}
+function updatesFeedHTML(){
+  const ups = WHDATA.updates || [];
+  const body = ups.length
+    ? ups.map(u=>`<div class="up"><span class="up-dot"></span><div><div class="up-txt">${u.text}</div><div class="up-time">${timeAgo(u.at)}</div></div></div>`).join('')
+    : `<div class="up-empty">No team updates yet. Open another tab, sign in as a team role (e.g. <b>site / site123</b>), complete a stage — it appears here live.</div>`;
+  return `<div class="updates">
+    <div class="updates-h"><span class="live"><i></i> Live team updates</span><span class="up-hint">auto-refreshes every few seconds</span></div>
+    ${body}</div>`;
+}
+function serviceCardsHTML(id, s, list){
+  return list.map((c,i)=>{
+    const h = HEALTH[c.status];
+    return `<div class="client" onclick="openClient('${id}',${i})">
+      <div class="cl-av" style="background:${s.bg};color:${s.col}">${c.name[0]}</div>
+      <div class="cl-main">
+        <b>${c.name}</b>
+        <p>${icon(pin,'currentColor',2)} ${c.site} · ${c.tag}</p>
+      </div>
+      <div class="cl-right">
+        <div class="cl-val">${c.val}</div>
+        <span class="cl-status" style="color:${h.c}"><span class="dot" style="background:${h.c}"></span>${h.t}</span>
+        <span class="cl-go">${icon(arrow,'currentColor',2)}</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+function renderServiceList(id){
+  const s = svcById(id);
+  const isWH = id==='warehouse';
+  const list = isWH ? WHDATA.projects : (CLIENTS[id]||[]);
+  const tag = isWH
+    ? `<span class="sample-tag" style="background:rgba(15,157,88,.12);color:#0b7a45;border-color:rgba(15,157,88,.3)"><i style="background:#0f9d58"></i>Live data</span>`
+    : `<span class="sample-tag"><i></i>Sample data</span>`;
+  document.getElementById('serviceBody').innerHTML = `
+    <div class="crumb" onclick="showDash()">${icon(back,'currentColor',2)} Back to services</div>
+    <div class="svc-hero">
+      <div class="h-ic" style="background:${s.bg}">${icon(s.ico,s.col,2)}</div>
+      <div><h2>${s.name}</h2><div class="d">${s.desc}</div></div>
+    </div>
+    ${isWH ? updatesFeedHTML() : ''}
+    <div class="clients-head">
+      <h3>Clients</h3>
+      <span><span class="cnt">${list.length} client${list.length!==1?'s':''} in this service</span>${tag}</span>
+    </div>
+    <div class="clients">${serviceCardsHTML(id, s, list)}</div>`;
+}
+function startWHPoll(){
+  stopWHPoll();
+  whPoll = setInterval(async ()=>{
+    await loadWH();
+    if(whView==='list') renderServiceList('warehouse');
+    else if(whView==='client' && whClientIdx!=null) renderClient('warehouse', whClientIdx);
+  }, 4000);
+}
+function stopWHPoll(){ if(whPoll){ clearInterval(whPoll); whPoll=null; } }
+
+/* go inside a service → show all clients in that service */
+async function openService(id){
+  stopWHPoll(); stopHomePoll();
+  if(id==='warehouse') await loadWH();
+  renderServiceList(id);
+  document.getElementById('view-dash').classList.remove('on');
+  document.getElementById('view-service').classList.add('on');
+  window.scrollTo({top:0});
+  if(id==='warehouse'){ whView='list'; whClientIdx=null; startWHPoll(); }
+  else { whView=null; }
+}
+function showDash(){
+  stopWHPoll(); whView=null; whClientIdx=null;
+  document.getElementById('view-service').classList.remove('on');
+  document.getElementById('view-dash').classList.add('on');
+  loadWH().then(renderOverview);
+  startHomePoll();
+  window.scrollTo({top:0});
+}
+function resetDemo(){
+  if(!confirm('Reset the Warehouse demo? This restores all projects and clears the team updates.'))return;
+  fetch('/api/reset',{method:'POST'}).finally(()=>location.reload());
+}
+
+/* ---- whole-project detail: materials, payments, documents (derived from stage) ---- */
+function parseLakhs(v){ const m=(v||'').match(/([\d.]+)\s*(Cr|L)/i); return m ? parseFloat(m[1])*(/cr/i.test(m[2])?100:1) : 0; }
+function fmtL(l){ return l>=100 ? '₹'+(l/100).toFixed(2)+' Cr' : '₹'+l.toFixed(1)+' L'; }
+const MAT_ICO='<path d="M3 7l9-4 9 4-9 4z"/><path d="M3 7v10l9 4 9-4V7"/><path d="M12 11v10"/>';
+const DOC_ICO='<path d="M4 3h11l5 5v13H4z"/><path d="M15 3v5h5"/>';
+
+function matStatus(c, si){
+  if(c.stage>6) return ['Received & used','ps-green'];
+  if(c.stage<5) return ['Planned','ps-grey'];
+  if(c.stage===5) return ['Ordered','ps-blue'];
+  if(si < c.sub) return ['Received & used','ps-green'];
+  if(si === c.sub) return ['On site','ps-amber'];
+  return ['Ordered','ps-blue'];
+}
+function materialsHTML(c, epoxy){
+  const mats = epoxy ? [
+    ['Surface prep — grinding / shot-blast media','Prep',0],
+    ['Epoxy primer','Primer',1],
+    ['Epoxy base coat — resin & hardener','Base coat',2],
+    ['Epoxy top coat & finish','Top coat',3],
+  ] : [
+    ['Cement, rebar & anchor bolts','Foundation',0],
+    ['Structural steel — columns & rafters','Erection',1],
+    ['Roof purlins & sheeting','Roofing',2],
+    ['Wall cladding sheets','Cladding',3],
+    ['MEP — conduits & fixtures','MEP',4],
+    ['Flooring — concrete / screed','Flooring',5],
+  ];
+  return mats.map(m=>{ const [t,cls]=matStatus(c,m[2]);
+    return `<div class="prow"><div class="pi">${icon(MAT_ICO,'currentColor',1.7)}</div><div class="pn">${m[0]}<small>${m[1]}</small></div><span class="pstat ${cls}">${t}</span></div>`;
+  }).join('');
+}
+function paymentsHTML(c){
+  const total=parseLakhs(c.val);
+  const rows=[
+    ['Mobilization advance',0.10, c.stage>=3?['Paid','ps-green']:['Due','ps-amber']],
+    ['Foundation milestone',0.25, (c.stage>6||(c.stage===6&&c.sub>=1))?['Paid','ps-green']:['Upcoming','ps-grey']],
+    ['Structure milestone',0.40, (c.stage>6||(c.stage===6&&c.sub>=4))?(c.stage>=9?['Paid','ps-green']:['Due','ps-amber']):['Upcoming','ps-grey']],
+    ['Completion — final',0.25, c.stage>=10?['Paid','ps-green']:(c.stage>=9?['Due','ps-amber']:['Upcoming','ps-grey'])],
+  ];
+  return rows.map(r=>{ const [t,cls]=r[2];
+    return `<div class="prow"><div class="pn">${r[0]}<small>${Math.round(r[1]*100)}% of contract</small></div><span class="pamt">${fmtL(total*r[1])}</span><span class="pstat ${cls}">${t}</span></div>`;
+  }).join('');
+}
+function docGroups(c){
+  return [
+    ['Design & Approvals', [
+      ['Initial meeting brief & requirements', 1],
+      ['Site survey report & photos', 1],
+      ['Proposal & concept design options', 2],
+      ['Developing design — floor plans & renderings', 2],
+      ['Detailed design & cost breakdown (BOQ)', 2],
+      ['Structural GA & fabrication drawings', 4],
+    ]],
+    ['Procurement & Execution', [
+      ['Work Order '+c.id, 3],
+      ['Purchase orders & material receipts', 5],
+      ['Material test certificates', 6],
+    ]],
+    ['Quality & Handover', [
+      ['QC inspection reports & sign-offs', 7],
+      ['Client progress reports', 8],
+      ['Completion certificate', 10],
+      ['Warranty & as-built dossier', 10],
+    ]],
+  ];
+}
+function docCounts(c){
+  let a=0,t=0; docGroups(c).forEach(g=>g[1].forEach(d=>{ t++; if(c.stage>=d[1]) a++; }));
+  return {a,t};
+}
+function docCenterHTML(c){
+  return docGroups(c).map(g=>`
+    <div class="doc-group-lab">${g[0]}</div>
+    <div class="panel">${g[1].map(d=>{ const ok=c.stage>=d[1];
+      return `<div class="prow ${ok?'':'pending'}"><div class="pi">${icon(DOC_ICO,'currentColor',1.7)}</div><div class="pn">${d[0]}</div>${ok?'<span class="doc-view">View</span>':''}<span class="pstat ${ok?'ps-green':'ps-grey'}">${ok?'Available':'Pending'}</span></div>`;
+    }).join('')}</div>`).join('');
+}
+
+/* ---- MD company overview (home roll-up) ---- */
+function milestones(c){
+  const t=parseLakhs(c.val);
+  return [
+    {label:'Mobilization advance', amt:t*0.10, state: c.stage>=3?'paid':'due'},
+    {label:'Foundation milestone', amt:t*0.25, state:(c.stage>6||(c.stage===6&&c.sub>=1))?'paid':'upcoming'},
+    {label:'Structure milestone',  amt:t*0.40, state:(c.stage>6||(c.stage===6&&c.sub>=4))?(c.stage>=9?'paid':'due'):'upcoming'},
+    {label:'Completion — final',   amt:t*0.25, state: c.stage>=10?'paid':(c.stage>=9?'due':'upcoming')},
+  ];
+}
+function allProjects(){
+  const out=[];
+  WHDATA.projects.forEach((p,i)=>out.push(Object.assign({service:'warehouse',_idx:i}, p)));
+  SERVICES.forEach(s=>{ if(s.id==='warehouse') return; (CLIENTS[s.id]||[]).forEach((c,i)=>out.push(Object.assign({service:s.id,_idx:i}, c))); });
+  return out;
+}
+function renderOverview(){
+  const el=document.getElementById('mdOverview'); if(!el) return;
+  const ps=allProjects();
+  let orderBook=0, billed=0, outstanding=0, onTrack=0, atRisk=0;
+  const recv=[];
+  ps.forEach(p=>{
+    orderBook += parseLakhs(p.val);
+    if(p.status==='ok') onTrack++; else atRisk++;
+    milestones(p).forEach(m=>{
+      if(m.state==='paid') billed += m.amt;
+      else if(m.state==='due'){ outstanding += m.amt; recv.push({p, label:m.label, amt:m.amt}); }
+    });
+  });
+  const att = ps.filter(p=>p.status!=='ok')
+    .map(p=>({p, sev:p.status, text:p.note || (p.status==='late'?'Delayed — delivery date at risk':'Needs attention')}))
+    .sort((a,b)=>(a.sev==='late'?0:1)-(b.sev==='late'?0:1));
+  recv.sort((a,b)=>b.amt-a.amt);
+
+  el.innerHTML = `
+   <div style="margin-bottom:30px">
+     <div class="ov-card">
+       <div class="oh"><h3><span class="ad" style="background:#dc2626"></span>Needs your attention</h3><span class="cnt">${att.length} flag${att.length!==1?'s':''}</span></div>
+       ${att.length ? att.slice(0,8).map(a=>`<div class="att" onclick="goProject('${a.p.service}',${a.p._idx})"><span class="ad" style="background:${a.sev==='late'?'#dc2626':'var(--amber)'}"></span><div class="am"><b>${a.p.name}</b><p>${a.text}</p><div class="asvc">${svcById(a.p.service).name}</div></div></div>`).join('')
+         : `<div class="up-empty" style="padding:16px 18px">Nothing on fire — every project is on track.</div>`}
+     </div>
+   </div>`;
+}
+let homePoll=null;
+function startHomePoll(){ stopHomePoll(); homePoll=setInterval(async()=>{ await loadWH(); renderOverview(); }, 5000); }
+function stopHomePoll(){ if(homePoll){ clearInterval(homePoll); homePoll=null; } }
+/* open a specific project from the overview */
+async function goProject(sid, i){
+  stopHomePoll();
+  if(sid==='warehouse'){ await loadWH(); whView='client'; whClientIdx=i; startWHPoll(); }
+  else { whView=null; }
+  renderClient(sid, i);
+  document.getElementById('view-dash').classList.remove('on');
+  document.getElementById('view-service').classList.add('on');
+  window.scrollTo({top:0});
+}
+
+/* click a client → track that project through the process */
+function openClient(sid, i){
+  if(sid==='warehouse'){ whView='client'; whClientIdx=i; }
+  else { stopWHPoll(); whView=null; }
+  renderClient(sid, i);
+  window.scrollTo({top:0});
+}
+function renderClient(sid, i){
+  const s = svcById(sid);
+  const c = (sid==='warehouse' ? WHDATA.projects[i] : CLIENTS[sid][i]);
+  if(!c) return;
+  const h = HEALTH[c.status];
+  const dc = docCounts(c);
+  const subs = s.sub==='epoxy' ? EPOXY_SUB : STEEL_SUB;
+  const steps = STAGES.map((name,idx)=>{
+    const n = idx+1;
+    const cls = n<c.stage ? 'done' : (n===c.stage ? 'current' : 'todo');
+    const node = cls==='done' ? icon('<path d="M20 6 9 17l-5-5"/>','#fff',3)
+               : cls==='current' ? '<span class="pulse"></span>' : '';
+    let subHtml = '';
+    if(n===6 && c.stage>=6){
+      subHtml = `<div class="substeps">${subs.map((ss,si)=>{
+        let sc=''; if(c.stage>6) sc='d'; else if(c.stage===6){ if(si<c.sub) sc='d'; else if(si===c.sub) sc='a'; }
+        return `<span class="substep ${sc}">${si+1}. ${ss}</span>`;
+      }).join('')}</div>`;
+    }
+    return `<div class="tstep ${cls}">
+      <div class="tnode">${node}</div>
+      <div class="tbody"><b>${n}. ${name}</b>${n===c.stage?'<span class="nowtag">Current</span>':''}<div class="tdoc">${STAGE_DOC[idx]}</div>${subHtml}</div>
+    </div>`;
+  }).join('');
+  document.getElementById('serviceBody').innerHTML = `
+    <div class="crumb" onclick="openService('${sid}')">${icon(back,'currentColor',2)} Back to ${s.name} clients</div>
+    <div class="client-hero">
+      <div class="ch-top">
+        <div class="cl-av" style="background:${s.bg};color:${s.col};width:54px;height:54px;border-radius:13px;font-size:21px">${c.name[0]}</div>
+        <div class="ch-name"><h2>${c.name}</h2><p>${icon(pin,'currentColor',2)} ${c.site} · ${c.tag}</p></div>
+        <span class="cl-status" style="color:${h.c}"><span class="dot" style="background:${h.c}"></span>${h.t}</span>
+      </div>
+      <div class="ch-facts">
+        <div class="mono"><span>Job ID</span><b>${c.id}</b></div>
+        <div class="mono"><span>Contract value</span><b>${c.val}</b></div>
+        <div><span>Assigned team</span><b>${c.team}</b></div>
+        <div><span>Start</span><b>${c.start}</b></div>
+        <div><span>Delivery</span><b>${c.delivery}</b></div>
+        <div class="mono"><span>Progress</span><b>${c.pct}%</b></div>
+      </div>
+      ${c.note?`<div class="ch-note">${icon(warnI,'currentColor',2)} ${c.note}</div>`:''}
+    </div>
+    <div class="track-head"><h3>Project progress</h3><span>Stage ${c.stage} of 10 · ${c.pct}% complete</span></div>
+    <div class="tracker">${steps}</div>
+
+    <div class="track-head"><h3>Materials &amp; procurement</h3><span>raw material sourcing → site</span></div>
+    <div class="panel">${materialsHTML(c, s.sub==='epoxy')}</div>
+
+    <div class="track-head"><h3>Payment milestones</h3><span>${c.val} contract</span></div>
+    <div class="panel">${paymentsHTML(c)}</div>
+
+    <div class="track-head"><h3>Document Center</h3><span>${dc.a} of ${dc.t} documents available · bundled to ${c.id}</span></div>
+    ${docCenterHTML(c)}`;
+}
+
+function logout(){ fetch('/api/logout',{method:'POST'}).finally(()=>{location.href='/login';}); }
+
+async function init(){
+  renderGrid();
+  await loadWH();
+  renderOverview();
+  startHomePoll();
+}
+init();
+</script>
+</body>
+</html>

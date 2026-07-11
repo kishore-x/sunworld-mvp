@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sunworld — Sign in</title>
+<style>
+  :root{
+    --bg:#faf7f1; --surface:#ffffff; --surface2:#faf8f4; --surface3:#f1ece3;
+    --border:#e8e3d9; --border-soft:#f0ece4;
+    --text:#1c1c1c; --muted:#5f5a52; --dim:#a39c90;
+    --brand-yellow:#FFD100; --brand-orange:#A63C06;
+    --accent:#E4610F; --accent2:#c24e0b;
+    --red:#dc2626; --red-bg:rgba(220,38,38,.1);
+    --shadow:0 1px 2px rgba(16,24,40,.04),0 2px 6px rgba(16,24,40,.06);
+    --sans:ui-sans-serif,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    --mono:'SF Mono',ui-monospace,'Menlo',monospace;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{min-height:100dvh;background:var(--bg);color:var(--text);font-family:var(--sans);-webkit-font-smoothing:antialiased}
+  .wrap{min-height:100dvh;display:grid;grid-template-columns:1.15fr .85fr}
+  @media(max-width:900px){.wrap{grid-template-columns:1fr}.left{display:none}}
+
+  /* left hero */
+  .left{position:relative;padding:44px 54px;display:flex;flex-direction:column;justify-content:space-between;overflow:hidden;
+    background:url('/slide1.jpg') center/cover no-repeat}
+  .left::before{content:'';position:absolute;inset:0;background:linear-gradient(165deg,rgba(24,26,30,.62),rgba(18,20,24,.9));z-index:0}
+  .left::after{content:'';position:absolute;left:0;right:0;bottom:0;height:5px;background:var(--brand-yellow);z-index:2}
+  .left>*{position:relative;z-index:1}
+  .badge{align-self:flex-start;background:#fff;border-radius:12px;padding:11px 16px;box-shadow:0 8px 26px rgba(0,0,0,.25)}
+  .badge img{height:42px;width:auto;display:block}
+  .hero h2{color:#fff;font-size:38px;font-weight:800;letter-spacing:-.035em;line-height:1.08;max-width:15ch}
+  .hero p{color:rgba(255,255,255,.82);font-size:14.5px;line-height:1.6;margin-top:18px;max-width:46ch}
+  .chips{margin-top:26px;display:flex;flex-wrap:wrap;gap:8px;max-width:44ch}
+  .chips span{font-size:11.5px;font-weight:600;color:#fff;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.2);padding:6px 12px;border-radius:20px;backdrop-filter:blur(4px)}
+  .foot{color:rgba(255,255,255,.6);font-size:11.5px;line-height:1.7}
+  .foot b{color:rgba(255,255,255,.85);font-weight:600}
+
+  /* right form */
+  .right{display:grid;place-items:center;padding:40px 28px}
+  .card{width:100%;max-width:390px}
+  .card .eyebrow{font-size:11px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--accent);margin-bottom:10px}
+  .card h3{font-size:24px;font-weight:800;letter-spacing:-.03em}
+  .card .sub{color:var(--muted);font-size:13.5px;margin-top:6px;margin-bottom:26px}
+  label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:7px}
+  .field{margin-bottom:16px}
+  input{width:100%;padding:12px 14px;border:1px solid var(--border);border-radius:10px;font-family:var(--sans);font-size:14px;color:var(--text);background:var(--surface);outline:none;transition:border-color .15s,box-shadow .15s}
+  input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(228,97,15,.15)}
+  .go{width:100%;margin-top:8px;padding:13px;border:none;border-radius:10px;background:var(--accent);color:#fff;font-family:var(--sans);font-size:14.5px;font-weight:700;cursor:pointer;transition:background .15s,transform .1s;box-shadow:0 6px 18px rgba(228,97,15,.28)}
+  .go:hover{background:var(--accent2)}
+  .go:active{transform:scale(.99)}
+  .err{display:none;background:var(--red-bg);color:var(--red);font-size:12.5px;font-weight:500;padding:10px 12px;border-radius:9px;margin-bottom:18px}
+  .hint{margin-top:20px;padding-top:16px;border-top:1px solid var(--border-soft);font-size:11.5px;color:var(--dim);line-height:1.8}
+  .hint code{font-family:var(--mono);background:var(--surface3);color:var(--muted);padding:1px 7px;border-radius:5px}
+  .quick{margin-top:20px;padding-top:16px;border-top:1px solid var(--border-soft)}
+  .quick .qlab{font-size:11px;color:var(--dim);font-weight:600;margin-bottom:9px}
+  .quick .qchips{display:flex;flex-wrap:wrap;gap:7px}
+  .qchip{font-size:11.5px;font-weight:600;padding:6px 11px;border-radius:20px;border:1px solid var(--border);background:var(--surface2);color:var(--muted);cursor:pointer;transition:border-color .12s,color .12s,background .12s}
+  .qchip:hover{border-color:var(--accent);color:var(--accent);background:#fff}
+  .qchip.md{border-color:var(--accent);color:var(--accent);background:rgba(228,97,15,.07)}
+  .mobrand{display:none}
+  @media(max-width:900px){.mobrand{display:block;text-align:center;margin-bottom:26px}.mobrand img{height:46px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="left">
+    <div class="badge"><img src="/logo.png" alt="Sunworld Construction Engineering"></div>
+    <div class="hero">
+      <h2>Your projects. One command center.</h2>
+      <p>Every job across all six Sunworld service lines — from enquiry to handover — visible and controlled in one place.</p>
+    </div>
+    <div class="foot"><b>Sunworld Infra Pvt Ltd</b> · Management Console<br>Built by Clickfield AI</div>
+  </div>
+
+  <div class="right">
+    <form class="card" onsubmit="return login(event)">
+      <div class="mobrand"><img src="/logo.png" alt="Sunworld"></div>
+      <div class="eyebrow">Management Console</div>
+      <h3>Sign in</h3>
+      <div class="sub">Access your project command center.</div>
+      <div class="err" id="err">Invalid username or password.</div>
+      <div class="field">
+        <label for="user">Username</label>
+        <input id="user" autocomplete="username" value="admin" autofocus>
+      </div>
+      <div class="field">
+        <label for="pass">Password</label>
+        <input id="pass" type="password" autocomplete="current-password" value="admin123">
+      </div>
+      <button class="go" type="submit">Sign in</button>
+      <div class="quick">
+        <div class="qlab">Quick login (demo) — tap a role, then Sign in</div>
+        <div class="qchips">
+          <span class="qchip md" onclick="fill('admin','admin123')">Managing Director</span>
+          <span class="qchip" onclick="fill('sales','sales123')">Sales &amp; Survey</span>
+          <span class="qchip" onclick="fill('commercial','commercial123')">Commercial</span>
+          <span class="qchip" onclick="fill('design','design123')">Design</span>
+          <span class="qchip" onclick="fill('purchase','purchase123')">Purchase</span>
+          <span class="qchip" onclick="fill('site','site123')">Site Engineer</span>
+          <span class="qchip" onclick="fill('qc','qc123')">Quality (QC)</span>
+          <span class="qchip" onclick="fill('accounts','accounts123')">Accounts</span>
+          <span class="qchip" onclick="fill('pm','pm123')">Coordinator</span>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+<script>
+function fill(u,p){ document.getElementById('user').value=u; document.getElementById('pass').value=p; document.getElementById('err').style.display='none'; }
+async function login(e){
+  e.preventDefault();
+  const user=document.getElementById('user').value;
+  const pass=document.getElementById('pass').value;
+  const err=document.getElementById('err');
+  try{
+    const r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user,pass})});
+    if(r.ok){ location.href='/'; }
+    else { err.style.display='block'; }
+  }catch{ err.textContent='Could not reach server.'; err.style.display='block'; }
+  return false;
+}
+</script>
+</body>
+</html>

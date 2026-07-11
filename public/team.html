@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sunworld — Team Workspace</title>
+<style>
+  :root{
+    --bg:#faf7f1; --surface:#ffffff; --surface2:#faf8f4; --surface3:#f1ece3;
+    --border:#e8e3d9; --border-soft:#f0ece4;
+    --text:#1c1c1c; --muted:#5f5a52; --dim:#a39c90;
+    --brand-yellow:#FFD100; --brand-ink:#1c1c1c; --brand-orange:#A63C06;
+    --accent:#E4610F; --accent2:#c24e0b;
+    --green:#0f9d58; --amber:#d97706; --red:#dc2626;
+    --shadow:0 1px 2px rgba(16,24,40,.04),0 2px 6px rgba(16,24,40,.06);
+    --mono:'SF Mono',ui-monospace,'Menlo',monospace;
+    --sans:ui-sans-serif,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{min-height:100dvh;background:var(--bg);color:var(--text);font-family:var(--sans);-webkit-font-smoothing:antialiased;font-size:14px}
+  .topbar{display:flex;align-items:center;gap:14px;padding:12px 30px;background:var(--brand-yellow);border-bottom:3px solid var(--brand-ink);position:sticky;top:0;z-index:10}
+  .brand-logo{height:42px;width:auto;display:block}
+  .who{margin-left:auto;display:flex;align-items:center;gap:10px}
+  .avatar{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#E4610F,#c24e0b);display:grid;place-items:center;font-weight:700;font-size:11px;color:#fff}
+  .who .n b{font-size:12.5px;font-weight:700;display:block;line-height:1.1;color:#1c1c1c}
+  .who .n small{font-size:10.5px;color:#6b5a2e}
+  .tbtn{font-family:var(--sans);font-size:11.5px;font-weight:600;padding:7px 12px;border-radius:8px;border:1px solid rgba(0,0,0,.2);background:rgba(255,255,255,.6);color:#1c1c1c;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+  .tbtn:hover{background:#fff;border-color:rgba(0,0,0,.38)}
+  .tbtn svg{width:14px;height:14px}
+
+  .wrap{max-width:1000px;margin:0 auto;padding:30px 30px 70px}
+  .head{margin-bottom:8px}
+  .head .eyebrow{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--accent)}
+  .head h2{font-size:24px;font-weight:800;letter-spacing:-.03em;margin-top:6px}
+  .reflect{display:flex;align-items:center;gap:10px;background:rgba(15,157,88,.09);border:1px solid rgba(15,157,88,.25);color:#0b7a45;border-radius:11px;padding:12px 16px;font-size:12.5px;font-weight:500;margin:18px 0 26px}
+  .reflect svg{width:17px;height:17px;flex-shrink:0}
+
+  .sec-lab{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:24px 2px 12px}
+  .task{background:var(--surface);border:1px solid var(--border);border-radius:13px;box-shadow:var(--shadow);padding:18px 20px;display:flex;align-items:center;gap:16px;margin-bottom:12px}
+  .task .t-ic{width:44px;height:44px;border-radius:11px;background:rgba(228,97,15,.1);color:var(--accent);display:grid;place-items:center;flex-shrink:0;font-weight:800;font-size:17px}
+  .task .t-main{flex:1;min-width:0}
+  .task .t-main b{font-size:15px;font-weight:700;letter-spacing:-.01em}
+  .task .t-main p{font-size:12px;color:var(--muted);margin-top:3px}
+  .task .t-stage{font-size:11.5px;color:var(--accent);font-weight:600;margin-top:5px}
+  .btn{font-family:var(--sans);font-size:13px;font-weight:700;padding:11px 18px;border-radius:10px;border:none;background:var(--accent);color:#fff;cursor:pointer;transition:background .15s,transform .1s;white-space:nowrap;box-shadow:0 5px 14px rgba(228,97,15,.25)}
+  .btn:hover{background:var(--accent2)}
+  .btn:active{transform:scale(.97)}
+  .empty{background:var(--surface);border:1px dashed var(--border);border-radius:13px;padding:40px;text-align:center;color:var(--dim)}
+  .empty svg{width:36px;height:36px;opacity:.5;margin-bottom:12px}
+  .empty b{display:block;color:var(--muted);font-size:14px;margin-bottom:4px}
+
+  .all{background:var(--surface);border:1px solid var(--border);border-radius:13px;box-shadow:var(--shadow);overflow:hidden}
+  .arow{display:flex;align-items:center;gap:12px;padding:12px 18px;border-bottom:1px solid var(--border-soft);font-size:12.5px}
+  .arow:last-child{border-bottom:none}
+  .arow .an{font-weight:600;flex:1}
+  .arow .as{font-size:11px;color:var(--muted);font-family:var(--mono)}
+  .mine{background:rgba(228,97,15,.06)}
+  .dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+
+  .toast{position:fixed;bottom:26px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--surface);border:1px solid var(--border);border-radius:11px;padding:13px 18px;display:flex;align-items:center;gap:11px;z-index:50;opacity:0;transition:opacity .25s,transform .25s;box-shadow:0 14px 40px rgba(16,24,40,.16);max-width:90vw}
+  .toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+  .toast .ti{width:24px;height:24px;border-radius:7px;background:rgba(15,157,88,.14);display:grid;place-items:center;flex-shrink:0}
+  .toast .ti svg{width:14px;height:14px}
+  .toast b{font-size:12.5px;font-weight:700}
+  .toast small{display:block;color:var(--dim);font-size:11px;margin-top:1px}
+</style>
+</head>
+<body>
+  <div class="topbar">
+    <img src="/logo.png" alt="Sunworld Construction Engineering" class="brand-logo">
+    <div class="who">
+      <div class="avatar" id="av">–</div>
+      <div class="n"><b id="roleName">…</b><small>Warehouse Construction team</small></div>
+      <button class="tbtn" onclick="logout()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5M21 12H9"/></svg> Log out</button>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <div class="head">
+      <div class="eyebrow">Warehouse Construction · Team Workspace</div>
+      <h2 id="title">…</h2>
+    </div>
+    <div class="reflect">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+      Every update you make here reflects instantly in the Managing Director's dashboard.
+    </div>
+
+    <div class="sec-lab">Your tasks — projects waiting on you</div>
+    <div id="tasks"></div>
+
+    <div class="sec-lab">All warehouse projects (live)</div>
+    <div class="all" id="all"></div>
+  </div>
+
+<script>
+const STAGE_NAME = ['Enquiry & Survey','Quotation','Work Order','Drawings','Procurement','Site Execution','Quality / QC','Client Update','Invoicing','Handover'];
+const STEEL_SUB  = ['Foundation','Column & Beam Erection','Roof Purlin & Sheeting','Wall Cladding','MEP Rough-in','Flooring','Finishing & Handover'];
+const STAGE_ACTION = {
+  1:'Log survey & generate Job ID', 2:'Send quotation / mark approved', 3:'Raise Work Order',
+  4:'Upload & approve drawings', 5:'Confirm material received', 6:'Advance construction sub-stage',
+  7:'Clear QC inspection', 8:'Send client update', 9:'Raise milestone invoice', 10:'Complete handover'
+};
+const HEALTH = {ok:'var(--green)', warn:'var(--amber)', late:'var(--red)'};
+let ME = null, DATA = {projects:[],updates:[]};
+
+function icon(p,s='currentColor',w=2){return `<svg viewBox="0 0 24 24" fill="none" stroke="${s}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`}
+
+async function boot(){
+  const me = await fetch('/api/me'); if(me.status===401){location.href='/login';return;}
+  ME = await me.json();
+  document.getElementById('roleName').textContent = ME.name;
+  document.getElementById('title').textContent = ME.name + ' workspace';
+  document.getElementById('av').textContent = ME.name.split(/[ /]/).map(w=>w[0]).slice(0,2).join('');
+  await load();
+}
+async function load(){
+  const r = await fetch('/api/warehouse'); if(r.status===401){location.href='/login';return;}
+  DATA = await r.json();
+  render();
+}
+function render(){
+  const mine = DATA.projects.filter(p=>ME.stages.includes(p.stage));
+  const tasks = document.getElementById('tasks');
+  if(mine.length===0){
+    tasks.innerHTML = `<div class="empty">${icon('<circle cx="12" cy="12" r="9"/><path d="M9 12l2 2 4-4"/>','currentColor',1.6)}<b>Nothing waiting on you right now</b><span>When a project reaches your stage, it will appear here.</span></div>`;
+  } else {
+    tasks.innerHTML = mine.map(p=>{
+      let stageTxt = `Stage ${p.stage} · ${STAGE_NAME[p.stage-1]}`;
+      if(p.stage===6) stageTxt += ` — currently “${STEEL_SUB[p.sub]}”`;
+      return `<div class="task">
+        <div class="t-ic">${p.name[0]}</div>
+        <div class="t-main">
+          <b>${p.name}</b>
+          <p>${p.site} · ${p.tag} · ${p.val}</p>
+          <div class="t-stage">${stageTxt}</div>
+        </div>
+        <button class="btn" onclick="advance('${p.id}')">${STAGE_ACTION[p.stage]} →</button>
+      </div>`;
+    }).join('');
+  }
+  document.getElementById('all').innerHTML = DATA.projects.map(p=>{
+    const isMine = ME.stages.includes(p.stage);
+    let s = `Stage ${p.stage} · ${STAGE_NAME[p.stage-1]}`;
+    if(p.stage===6) s = `Execution · ${STEEL_SUB[p.sub]}`;
+    return `<div class="arow ${isMine?'mine':''}">
+      <span class="dot" style="background:${HEALTH[p.status]}"></span>
+      <span class="an">${p.name}</span>
+      <span class="as">${s}</span>
+    </div>`;
+  }).join('');
+}
+async function advance(id){
+  const r = await fetch('/api/warehouse/'+id+'/advance',{method:'POST'});
+  const j = await r.json();
+  if(!r.ok){ toast('Not allowed', j.error||'Your role cannot update this stage'); return; }
+  DATA.updates = j.updates || DATA.updates;
+  toast('Update saved', 'Reflected in the MD dashboard');
+  await load();
+}
+function logout(){ fetch('/api/logout',{method:'POST'}).finally(()=>location.href='/login'); }
+
+let tt;
+function toast(title, sub){
+  let t=document.getElementById('toast');
+  if(!t){t=document.createElement('div');t.id='toast';t.className='toast';document.body.appendChild(t);}
+  t.innerHTML=`<div class="ti">${icon('<path d="M20 6 9 17l-5-5"/>','var(--green)',2.6)}</div><div><b>${title}</b><small>${sub}</small></div>`;
+  requestAnimationFrame(()=>t.classList.add('on'));
+  clearTimeout(tt); tt=setTimeout(()=>t.classList.remove('on'),3200);
+}
+boot();
+</script>
+</body>
+</html>
