@@ -4,6 +4,7 @@
   "private": true,
   "description": "Sunworld Project Command Center — MD dashboard MVP (Clickfield AI)",
   "scripts": {
-    "start": "node server.js"
+    "start": "node watchdog.js",
+    "dev": "node server.js"
   }
 }

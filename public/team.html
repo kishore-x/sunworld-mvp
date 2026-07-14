@@ -32,6 +32,11 @@
   .head{margin-bottom:8px}
   .head .eyebrow{font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--accent)}
   .head h2{font-size:24px;font-weight:800;letter-spacing:-.03em;margin-top:6px}
+  .scope-note{font-size:12.5px;color:var(--muted);margin-top:5px}
+  .scope-note.notify{display:flex;align-items:center;gap:10px;background:rgba(228,97,15,.1);border:1px solid rgba(228,97,15,.3);color:#9c4a0e;border-radius:11px;padding:12px 16px;font-size:13px;font-weight:600;margin-top:10px}
+  .scope-note.notify svg{width:18px;height:18px;flex-shrink:0}
+  .scope-note.notify i{width:8px;height:8px;border-radius:50%;background:var(--accent);flex-shrink:0;animation:np 1.8s infinite}
+  @keyframes np{0%{box-shadow:0 0 0 0 rgba(228,97,15,.45)}70%{box-shadow:0 0 0 7px rgba(228,97,15,0)}100%{box-shadow:0 0 0 0 rgba(228,97,15,0)}}
   .reflect{display:flex;align-items:center;gap:10px;background:rgba(15,157,88,.09);border:1px solid rgba(15,157,88,.25);color:#0b7a45;border-radius:11px;padding:12px 16px;font-size:12.5px;font-weight:500;margin:18px 0 26px}
   .reflect svg{width:17px;height:17px;flex-shrink:0}
 
@@ -48,6 +53,52 @@
   .empty{background:var(--surface);border:1px dashed var(--border);border-radius:13px;padding:40px;text-align:center;color:var(--dim)}
   .empty svg{width:36px;height:36px;opacity:.5;margin-bottom:12px}
   .empty b{display:block;color:var(--muted);font-size:14px;margin-bottom:4px}
+
+  .picker{background:var(--surface);border:1px solid var(--border);border-radius:13px;box-shadow:var(--shadow);padding:16px 18px;margin-bottom:14px}
+  .picker label{display:block;font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px}
+  .picker select{width:100%;padding:11px 13px;border:1px solid var(--border);border-radius:9px;font-family:var(--sans);font-size:13.5px;color:var(--text);background:var(--surface2);outline:none;cursor:pointer}
+  .picker select:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(228,97,15,.12)}
+
+  .plan-hero{background:var(--surface);border:1px solid var(--border);border-radius:13px;box-shadow:var(--shadow);padding:18px 20px;margin-bottom:14px}
+  .plan-hero .ph-top{display:flex;align-items:center;gap:14px}
+  .plan-hero .ph-ic{width:42px;height:42px;border-radius:10px;background:rgba(228,97,15,.1);color:var(--accent);display:grid;place-items:center;flex-shrink:0;font-weight:800;font-size:16px}
+  .plan-hero h3{font-size:17px;font-weight:800;letter-spacing:-.02em}
+  .plan-hero p{font-size:12px;color:var(--muted);margin-top:2px}
+  .plan-hero .ph-meta{display:flex;gap:22px;margin-top:14px;padding-top:14px;border-top:1px solid var(--border-soft)}
+  .plan-hero .ph-meta div span{font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.05em}
+  .plan-hero .ph-meta div b{display:block;font-size:13px;font-weight:700;margin-top:2px;font-family:var(--mono)}
+
+  .plan-track{background:var(--surface);border:1px solid var(--border);border-radius:13px;box-shadow:var(--shadow);padding:8px 0;margin-bottom:14px}
+  .pstage{display:flex;align-items:center;gap:14px;padding:13px 20px;border-bottom:1px solid var(--border-soft)}
+  .pstage:last-child{border-bottom:none}
+  .pstage .pnum{width:26px;height:26px;border-radius:50%;background:var(--surface3);color:var(--dim);display:grid;place-items:center;font-size:11.5px;font-weight:800;flex-shrink:0}
+  .pstage.done .pnum{background:var(--green);color:#fff}
+  .pstage.current .pnum{background:var(--accent);color:#fff}
+  .pstage .pname{flex:1;font-size:13px;font-weight:700}
+  .pstage.todo .pname{color:var(--dim);font-weight:600}
+  .pstage .psub{font-size:11px;color:var(--accent);font-weight:600;margin-top:2px}
+  .pstage .ptag{font-size:10px;font-weight:700;padding:2px 9px;border-radius:20px;background:var(--surface3);color:var(--dim)}
+  .pstage.done .ptag{background:rgba(15,157,88,.13);color:var(--green)}
+  .pstage.current .ptag{background:rgba(228,97,15,.13);color:var(--accent)}
+  .plan-actions{display:flex;gap:10px;flex-wrap:wrap}
+  .btn-outline{font-family:var(--sans);font-size:12.5px;font-weight:700;padding:10px 16px;border-radius:10px;border:1px solid var(--accent);background:transparent;color:var(--accent);cursor:pointer;transition:background .15s}
+  .btn-outline:hover{background:rgba(228,97,15,.08)}
+
+  .modcard{background:var(--surface);border:1px solid var(--border);border-radius:13px;box-shadow:var(--shadow);padding:16px 18px;margin-bottom:12px}
+  .modcard .mh{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px}
+  .modcard .mh b{font-size:14px;font-weight:800;letter-spacing:-.01em}
+  .modcard .mh span{font-size:11px;color:var(--accent);font-weight:700;background:rgba(228,97,15,.1);padding:3px 10px;border-radius:20px}
+  .mitem{display:flex;align-items:center;gap:10px;padding:9px 0;border-bottom:1px solid var(--border-soft);font-size:13px}
+  .mitem:last-child{border-bottom:none}
+  .mitem .mn{flex:1;font-weight:600}
+  .mitem .ma{font-size:12px;color:var(--muted);font-family:var(--mono)}
+  .mitem .mstat{font-size:10.5px;font-weight:700;padding:3px 9px;border-radius:20px;cursor:pointer;border:none}
+  .mitem .mstat.pending{background:var(--surface3);color:var(--dim)}
+  .mitem .mstat.done{background:rgba(15,157,88,.13);color:var(--green)}
+  .maddrow{display:flex;gap:8px;margin-top:10px}
+  .maddrow input{flex:1;padding:9px 11px;border:1px solid var(--border);border-radius:8px;font-family:var(--sans);font-size:12.5px;background:var(--surface2);outline:none}
+  .maddrow input:focus{border-color:var(--accent)}
+  .maddrow button{font-family:var(--sans);font-size:12px;font-weight:700;padding:9px 14px;border-radius:8px;border:none;background:var(--accent);color:#fff;cursor:pointer;white-space:nowrap}
 
   .all{background:var(--surface);border:1px solid var(--border);border-radius:13px;box-shadow:var(--shadow);overflow:hidden}
   .arow{display:flex;align-items:center;gap:12px;padding:12px 18px;border-bottom:1px solid var(--border-soft);font-size:12.5px}
@@ -70,40 +121,86 @@
     <img src="/logo.png" alt="Sunworld Construction Engineering" class="brand-logo">
     <div class="who">
       <div class="avatar" id="av">–</div>
-      <div class="n"><b id="roleName">…</b><small>Warehouse Construction team</small></div>
+      <div class="n"><b id="roleName">…</b><small>Sunworld team</small></div>
       <button class="tbtn" onclick="logout()"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5M21 12H9"/></svg> Log out</button>
     </div>
   </div>
 
   <div class="wrap">
     <div class="head">
-      <div class="eyebrow">Warehouse Construction · Team Workspace</div>
+      <div class="eyebrow">Sunworld · Team Workspace</div>
       <h2 id="title">…</h2>
+      <div class="scope-note" id="scopeNote"></div>
     </div>
     <div class="reflect">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
       Every update you make here reflects instantly in the Managing Director's dashboard.
     </div>
 
-    <div class="sec-lab">Your tasks — projects waiting on you</div>
-    <div id="tasks"></div>
+    <div class="sec-lab">Build a project plan</div>
+    <div class="picker">
+      <label for="planSelect">Select a project waiting on you</label>
+      <select id="planSelect" onchange="selectPlanProject(this.value)">
+        <option value="">Choose a project…</option>
+      </select>
+    </div>
+    <div id="planBuilder"></div>
 
-    <div class="sec-lab">All warehouse projects (live)</div>
+    <div class="sec-lab" id="assignedLab" style="display:none">Stages assigned to you</div>
+    <div id="assignedWork"></div>
+
+    <div class="sec-lab" id="modulesLab" style="display:none">Work areas assigned to you</div>
+    <div id="moduleWork"></div>
+
+    <div class="sec-lab">All projects — every service (live)</div>
     <div class="all" id="all"></div>
   </div>
 
 <script>
 const STAGE_NAME = ['Enquiry & Survey','Quotation','Work Order','Drawings','Procurement','Site Execution','Quality / QC','Client Update','Invoicing','Handover'];
 const STEEL_SUB  = ['Foundation','Column & Beam Erection','Roof Purlin & Sheeting','Wall Cladding','MEP Rough-in','Flooring','Finishing & Handover'];
-const STAGE_ACTION = {
-  1:'Log survey & generate Job ID', 2:'Send quotation / mark approved', 3:'Raise Work Order',
-  4:'Upload & approve drawings', 5:'Confirm material received', 6:'Advance construction sub-stage',
-  7:'Clear QC inspection', 8:'Send client update', 9:'Raise milestone invoice', 10:'Complete handover'
+const EPOXY_SUB  = ['Surface Preparation','Primer Coat','Base Coat','Top Coat','Cure & Inspection','Handover'];
+const SERVICE_NAME = {warehouse:'Civil Construction', steel:'Steel Construction', epoxy:'Epoxy Flooring', interior:'Interior', exterior:'Exterior'};
+function subFor(service){ return service==='epoxy' ? EPOXY_SUB : STEEL_SUB; }
+const STAGE_ACTION_BY_ID = {
+  'st-1':'Log survey & generate Job ID', 'st-2':'Send quotation / mark approved', 'st-3':'Raise Work Order',
+  'st-4':'Upload & approve drawings', 'st-5':'Confirm material received',
+  'st-7':'Clear QC inspection', 'st-8':'Send client update', 'st-9':'Raise milestone invoice', 'st-10':'Complete handover'
 };
+function stageActionText(stageObj){
+  if(stageObj.kind==='site-execution') return 'Advance construction sub-stage';
+  return STAGE_ACTION_BY_ID[stageObj.id] || `Mark "${stageObj.name}" complete`;
+}
 const HEALTH = {ok:'var(--green)', warn:'var(--amber)', late:'var(--red)'};
+const MODULE_LABEL = {progress:'Project Progress', materials:'Materials & Procurement', payments:'Payment Milestones', documents:'Document Center'};
 let ME = null, DATA = {projects:[],updates:[]};
+let prevMineIds = null, prevModuleKeys = null, prevAssignedKeys = null, pollTimer = null;
+/* CSRF: every state-changing request must echo back this session's own token (ME.csrf, set at
+   boot from /api/me). apiFetch is a drop-in replacement for fetch() that adds it automatically. */
+function apiFetch(url, opts={}){
+  opts.headers = Object.assign({}, opts.headers, (ME&&ME.csrf) ? {'X-CSRF-Token':ME.csrf} : {});
+  return fetch(url, opts);
+}
 
 function icon(p,s='currentColor',w=2){return `<svg viewBox="0 0 24 24" fill="none" stroke="${s}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`}
+
+/* ---- Draft persistence: whatever's mid-typed in a form survives a refresh (localStorage,
+   keyed by the input's own id) — cleared once the form is actually submitted successfully. ---- */
+const DRAFT_PREFIX = 'sw-draft:';
+function bindDrafts(root){
+  if(!root) return;
+  root.querySelectorAll('input[id], select[id], textarea[id]').forEach(el=>{
+    if(el.type==='file') return; // browsers never let you restore a file input's value — not persistable
+    const key = DRAFT_PREFIX + el.id;
+    const saved = localStorage.getItem(key);
+    if(saved!==null && !el.value) el.value = saved;
+    const ev = el.tagName==='SELECT' ? 'change' : 'input';
+    el.addEventListener(ev, ()=> localStorage.setItem(key, el.value));
+  });
+}
+function clearDrafts(ids){ ids.forEach(id=>localStorage.removeItem(DRAFT_PREFIX+id)); }
+function poDraftRowIds(projectId){ try{ return JSON.parse(localStorage.getItem(DRAFT_PREFIX+'po-rows-'+projectId)||'[]'); }catch{ return []; } }
+function savePoDraftRowIds(projectId, ids){ localStorage.setItem(DRAFT_PREFIX+'po-rows-'+projectId, JSON.stringify(ids)); }
 
 async function boot(){
   const me = await fetch('/api/me'); if(me.status===401){location.href='/login';return;}
@@ -112,52 +209,457 @@ async function boot(){
   document.getElementById('title').textContent = ME.name + ' workspace';
   document.getElementById('av').textContent = ME.name.split(/[ /]/).map(w=>w[0]).slice(0,2).join('');
   await load();
+  pollTimer = setInterval(load, 4000);
 }
 async function load(){
-  const r = await fetch('/api/warehouse'); if(r.status===401){location.href='/login';return;}
+  const r = await fetch('/api/projects'); if(r.status===401){location.href='/login';return;}
   DATA = await r.json();
   render();
 }
-function render(){
-  const mine = DATA.projects.filter(p=>ME.stages.includes(p.stage));
-  const tasks = document.getElementById('tasks');
-  if(mine.length===0){
-    tasks.innerHTML = `<div class="empty">${icon('<circle cx="12" cy="12" r="9"/><path d="M9 12l2 2 4-4"/>','currentColor',1.6)}<b>Nothing waiting on you right now</b><span>When a project reaches your stage, it will appear here.</span></div>`;
+function updateScopeNote(mineCount){
+  const note = document.getElementById('scopeNote');
+  if(mineCount>0){
+    note.className = 'scope-note notify';
+    note.innerHTML = `<i></i>${icon('<path d="M6 9a6 6 0 1 1 12 0c0 5 2 6 2 6H4s2-1 2-6z"/><path d="M10 20a2 2 0 0 0 4 0"/>','currentColor',2)}<span>${mineCount} project${mineCount!==1?'s':''} waiting on you — see below.</span>`;
   } else {
-    tasks.innerHTML = mine.map(p=>{
-      let stageTxt = `Stage ${p.stage} · ${STAGE_NAME[p.stage-1]}`;
-      if(p.stage===6) stageTxt += ` — currently “${STEEL_SUB[p.sub]}”`;
-      return `<div class="task">
-        <div class="t-ic">${p.name[0]}</div>
-        <div class="t-main">
-          <b>${p.name}</b>
-          <p>${p.site} · ${p.tag} · ${p.val}</p>
-          <div class="t-stage">${stageTxt}</div>
-        </div>
-        <button class="btn" onclick="advance('${p.id}')">${STAGE_ACTION[p.stage]} →</button>
-      </div>`;
-    }).join('');
+    note.className = 'scope-note';
+    note.textContent = `Nothing waiting on you right now.`;
   }
+}
+// Site Execution (kind:'site-execution') is always person-gated — only sees/acts on it once the MD
+// assigned that exact stage to this login's name. Every other stage is department-wide for anyone
+// with canGeneral (Coordinator, Supervisor) — Site Manager only ever touches Site Execution.
+function curStageOf(p){ return (p.stages||[])[p.stage-1]; }
+function isMine(p){
+  const cur = curStageOf(p); if(!cur) return false;
+  if(cur.kind==='site-execution') return !!(ME.canSiteExecution && p.assignees && p.assignees[cur.id]===ME.person);
+  return !!ME.canGeneral;
+}
+let selectedProjectId = null;
+function render(){
+  const mine = DATA.projects.filter(isMine);
+
+  // notify the moment new work lands in this login's queue
+  const currentIds = new Set(mine.map(p=>p.id));
+  if(prevMineIds!==null){
+    mine.forEach(p=>{ if(!prevMineIds.has(p.id)) toast('New task', `${p.name} is now waiting on you.`); });
+  }
+  prevMineIds = currentIds;
+  updateScopeNote(mine.length);
+
+  // populate the project picker, preserving the current selection across polls
+  const sel = document.getElementById('planSelect');
+  const prevVal = sel.value;
+  sel.innerHTML = `<option value="">Choose a project…</option>` + mine.map(p=>
+    `<option value="${p.id}">${p.name} — Stage ${p.stage} · ${(curStageOf(p)||{}).name||''}</option>`
+  ).join('');
+  if(mine.some(p=>p.id===prevVal)) sel.value = prevVal;
+  else if(selectedProjectId && mine.some(p=>p.id===selectedProjectId)) sel.value = selectedProjectId;
+  else selectedProjectId = null;
+  // don't blow away a field the user is mid-typing when the 4s poll fires
+  const typing = document.activeElement && /^(po-|po-it-|add-|amt-|newfld-|val-|upl-)/.test(document.activeElement.id||'');
+  if(!typing){
+    renderPlanBuilder(); renderModuleWork(); renderAssignedWork();
+    bindDrafts(document.getElementById('planBuilder'));
+    bindDrafts(document.getElementById('moduleWork'));
+  }
+
   document.getElementById('all').innerHTML = DATA.projects.map(p=>{
-    const isMine = ME.stages.includes(p.stage);
-    let s = `Stage ${p.stage} · ${STAGE_NAME[p.stage-1]}`;
-    if(p.stage===6) s = `Execution · ${STEEL_SUB[p.sub]}`;
-    return `<div class="arow ${isMine?'mine':''}">
+    const mineFlag = isMine(p);
+    const cur = curStageOf(p);
+    let s = cur ? `Stage ${p.stage} · ${cur.name}` : '';
+    if(cur && cur.kind==='site-execution') s = `Execution · ${subFor(p.service)[p.sub]}`;
+    return `<div class="arow ${mineFlag?'mine':''}">
       <span class="dot" style="background:${HEALTH[p.status]}"></span>
-      <span class="an">${p.name}</span>
+      <span class="an">${p.name} <small style="color:var(--dim);font-weight:400">· ${SERVICE_NAME[p.service]||p.service}</small></span>
       <span class="as">${s}</span>
     </div>`;
   }).join('');
 }
+// Notify the instant the MD assigns a stage to this person's exact name, even if that stage isn't
+// the project's *current* stage yet — e.g. MD can assign Site Manager to Site Execution while the
+// project is still at Stage 1, and they should know right away, not just when it becomes active.
+function myAssignedStages(){
+  const out = [];
+  if(!ME.person) return out;
+  DATA.projects.forEach(p=>{
+    (p.stages||[]).forEach(st=>{ if(p.assignees && p.assignees[st.id]===ME.person) out.push({p, stage:st}); });
+  });
+  return out;
+}
+function renderAssignedWork(){
+  const assigned = myAssignedStages();
+  const lab = document.getElementById('assignedLab');
+  const el = document.getElementById('assignedWork');
+  const keys = new Set(assigned.map(a=>a.p.id+':'+a.stage.id));
+  if(prevAssignedKeys!==null){
+    keys.forEach(k=>{ if(!prevAssignedKeys.has(k)){
+      const [pid,stId] = k.split(':'); const a = assigned.find(x=>x.p.id===pid && x.stage.id===stId);
+      toast('MD assigned you work', a ? `${a.stage.name} on ${a.p.name} is now assigned to you.` : 'Check your assigned stages.');
+    }});
+  }
+  prevAssignedKeys = keys;
+  if(!assigned.length){ lab.style.display='none'; el.innerHTML=''; return; }
+  lab.style.display='block';
+  const banner = `<div class="scope-note notify" style="margin-bottom:14px">${icon('<path d="M6 9a6 6 0 1 1 12 0c0 5 2 6 2 6H4s2-1 2-6z"/><path d="M10 20a2 2 0 0 0 4 0"/>','currentColor',2)}<span>The Managing Director assigned you ${assigned.length} stage${assigned.length!==1?'s':''} — see below.</span></div>`;
+  el.innerHTML = banner + assigned.map(({p,stage})=>`
+    <div class="modcard" style="cursor:pointer" onclick="document.getElementById('planSelect').value='${p.id}'; selectPlanProject('${p.id}')">
+      <div class="mh"><b>${p.name} — ${stage.name}</b><span>${SERVICE_NAME[p.service]||p.service}</span></div>
+      <div style="color:var(--dim);font-size:12.5px">Currently at Stage ${p.stage} of ${p.stages.length} — click to open this project's plan.</div>
+    </div>`).join('');
+}
+function myModuleWork(){
+  // materials/payments/documents are handed out per-project independent of stage access —
+  // e.g. MD can assign "Materials" on a project to Site Manager even if it's not otherwise their stage.
+  const out = [];
+  DATA.projects.forEach(p=>{
+    ['materials','payments','documents'].forEach(mod=>{
+      if(p.moduleAssignees && p.moduleAssignees[mod]===ME.role) out.push({p, mod});
+    });
+  });
+  return out;
+}
+function renderModuleWork(){
+  const work = myModuleWork();
+  const lab = document.getElementById('modulesLab');
+  const el = document.getElementById('moduleWork');
+  const keys = new Set(work.map(w=>w.p.id+':'+w.mod));
+  if(prevModuleKeys!==null){
+    keys.forEach(k=>{ if(!prevModuleKeys.has(k)){
+      const [pid,mod] = k.split(':'); const p = DATA.projects.find(x=>x.id===pid);
+      toast('New work area assigned', `${MODULE_LABEL[mod]} on ${p?p.name:pid} is now yours.`);
+    }});
+  }
+  prevModuleKeys = keys;
+  if(!work.length){ lab.style.display='none'; el.innerHTML=''; return; }
+  lab.style.display='block';
+  const banner = `<div class="scope-note notify" style="margin-bottom:14px">${icon('<path d="M6 9a6 6 0 1 1 12 0c0 5 2 6 2 6H4s2-1 2-6z"/><path d="M10 20a2 2 0 0 0 4 0"/>','currentColor',2)}<span>The Managing Director assigned ${work.length} work area${work.length!==1?'s':''} to you — fill in the details below.</span></div>`;
+  el.innerHTML = banner + work.map(({p,mod})=>{
+    const items = p[mod] || [];
+    const rows = items.length ? items.map((it,idx)=>{
+      const meta = [];
+      if(mod==='materials'){ if(it.qty) meta.push(`${it.qty}${it.unit?' '+it.unit:''}`); if(it.note) meta.push(it.note); }
+      if(mod==='documents'){ if(it.docType) meta.push(it.docType); if(it.note) meta.push(it.note); }
+      return `<div class="mitem">
+        <div class="mn">${it.name}${meta.length?`<div style="color:var(--dim);font-weight:400;font-size:11.5px;margin-top:2px">${meta.join(' · ')}</div>`:''}</div>
+        ${mod==='payments' ? `<div class="ma">${it.amount||'—'}</div>` : ''}
+        <button class="mstat ${it.status==='Done'?'done':'pending'}" onclick="toggleModuleItem('${p.id}','${mod}',${idx})">${it.status==='Done'?'Done':'Mark done'}</button>
+      </div>`;
+    }).join('') : `<div style="color:var(--dim);font-size:12.5px;padding:6px 0">Nothing added yet.</div>`;
+    let extraFields = '';
+    if(mod==='materials') extraFields = `${poIn(`add-qty-${p.id}-${mod}`,'Qty','width:70px')}${poIn(`add-unit-${p.id}-${mod}`,'Unit (bags/tons/pcs)','width:130px')}${poIn(`add-note-${p.id}-${mod}`,'Note (optional)','flex:1')}`;
+    if(mod==='payments') extraFields = poIn(`amt-${p.id}-${mod}`,'Amount (e.g. ₹5.0 L)','max-width:150px');
+    if(mod==='documents') extraFields = `${poIn(`add-doctype-${p.id}-${mod}`,'Type (e.g. Drawing, Certificate)','flex:1')}${poIn(`add-note-${p.id}-${mod}`,'Note (optional)','flex:1')}`;
+    return `<div class="modcard">
+      <div class="mh"><b>${p.name} — ${MODULE_LABEL[mod]}</b><span>${SERVICE_NAME[p.service]||p.service}</span></div>
+      ${rows}
+      <div class="maddrow" style="flex-wrap:wrap">
+        <input id="add-${p.id}-${mod}" placeholder="${mod==='materials'?'Material name':mod==='payments'?'Milestone name':'Document name'}" style="flex:1.3">
+        ${extraFields}
+        <button onclick="addModuleItem('${p.id}','${mod}')">Add</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+async function addModuleItem(projectId, mod){
+  const nameEl = document.getElementById(`add-${projectId}-${mod}`);
+  const name = (nameEl.value||'').trim();
+  if(!name) return;
+  const body = {module:mod, name};
+  const draftIds = [`add-${projectId}-${mod}`];
+  if(mod==='payments'){ const amtEl = document.getElementById(`amt-${projectId}-${mod}`); body.amount = amtEl ? amtEl.value : ''; draftIds.push(`amt-${projectId}-${mod}`); }
+  if(mod==='materials'){
+    body.qty = document.getElementById(`add-qty-${projectId}-${mod}`)?.value||'';
+    body.unit = document.getElementById(`add-unit-${projectId}-${mod}`)?.value||'';
+    body.note = document.getElementById(`add-note-${projectId}-${mod}`)?.value||'';
+    draftIds.push(`add-qty-${projectId}-${mod}`,`add-unit-${projectId}-${mod}`,`add-note-${projectId}-${mod}`);
+  }
+  if(mod==='documents'){
+    body.docType = document.getElementById(`add-doctype-${projectId}-${mod}`)?.value||'';
+    body.note = document.getElementById(`add-note-${projectId}-${mod}`)?.value||'';
+    draftIds.push(`add-doctype-${projectId}-${mod}`,`add-note-${projectId}-${mod}`);
+  }
+  try{
+    const r = await apiFetch('/api/projects/'+projectId+'/module-item/add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const j = await r.json();
+    if(!r.ok){ toast('Not allowed', j.error||'Could not add'); return; }
+    toast('Added', 'Reflected in the MD dashboard');
+    clearDrafts(draftIds);
+    await load();
+  }catch{ toast('Network error','Could not reach server'); }
+}
+async function toggleModuleItem(projectId, mod, idx){
+  try{
+    const r = await apiFetch('/api/projects/'+projectId+'/module-item/toggle',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({module:mod, idx})});
+    const j = await r.json();
+    if(!r.ok){ toast('Not allowed', j.error||'Could not update'); return; }
+    await load();
+  }catch{ toast('Network error','Could not reach server'); }
+}
+function selectPlanProject(id){ selectedProjectId = id || null; renderPlanBuilder(); }
+const canEditProcess = () => ME.role==='supervisor';
+function fieldRowHTML(p, stageObj, f){
+  if(f.type==='file'){
+    return `<div class="mitem">
+      <div class="mn">${icon('<path d="M4 3h11l5 5v13H4z"/><path d="M15 3v5h5"/>','currentColor',1.6)} ${f.label}${f.origName?` — <span style="color:var(--green)">${f.origName}</span>`:''}</div>
+      ${f.value ? `<a class="btn-outline" style="padding:6px 10px;text-decoration:none" href="/api/uploads/${f.value}" target="_blank">View</a>` : ''}
+      <input type="file" id="upl-${p.id}-${stageObj.id}-${f.id}" style="max-width:170px;font-size:11px">
+      <button class="mstat pending" onclick="uploadStageFile('${p.id}','${stageObj.id}','${f.id}')">${f.value?'Replace':'Upload'}</button>
+    </div>`;
+  }
+  return `<div class="mitem">
+    <div class="mn">${f.label}</div>
+    <input id="val-${p.id}-${stageObj.id}-${f.id}" value="${(f.value||'').replace(/"/g,'&quot;')}" placeholder="Enter ${f.label.toLowerCase()}" style="flex:1.4">
+    <button class="mstat pending" onclick="saveFieldValue('${p.id}','${stageObj.id}','${f.id}')">Save</button>
+  </div>`;
+}
+function renderPlanBuilder(){
+  const el = document.getElementById('planBuilder');
+  const p = selectedProjectId ? DATA.projects.find(x=>x.id===selectedProjectId) : null;
+  if(!p){
+    el.innerHTML = `<div class="empty">${icon('<path d="M12 5v14M5 12h14"/>','currentColor',1.6)}<b>No project selected</b><span>Pick a project above to build its plan, stage by stage.</span></div>`;
+    return;
+  }
+  const subs = subFor(p.service);
+  const editable = canEditProcess();
+  const stages = (p.stages||[]).map((stageObj,idx)=>{
+    const n = idx+1;
+    const cls = n<p.stage ? 'done' : (n===p.stage ? 'current' : 'todo');
+    const tag = cls==='done' ? 'Done' : (cls==='current' ? 'Current' : 'Pending');
+    let subTxt = '';
+    if(stageObj.kind==='site-execution' && p.stage>=n) subTxt = `<div class="psub">${p.stage>n ? 'All sub-stages complete' : `Currently: ${subs[p.sub]}`}</div>`;
+    const renameBtn = editable ? `<button class="btn-outline" style="padding:3px 8px;font-size:11px;margin-left:8px" onclick="renameStage('${p.id}','${stageObj.id}','${stageObj.name.replace(/'/g,"\\'")}')">Rename</button>` : '';
+    let fieldsHtml = '';
+    if(cls==='current'){
+      const fields = (stageObj.fields||[]).map(f=>fieldRowHTML(p, stageObj, f)).join('');
+      const addFieldBtn = editable ? `<div class="maddrow" style="margin-top:6px">
+          <input id="newfld-${p.id}-${stageObj.id}" placeholder="New field/document name (e.g. Site Survey Report)">
+          <select id="newfldtype-${p.id}-${stageObj.id}" style="max-width:110px">
+            <option value="text">Text field</option>
+            <option value="file">Document</option>
+          </select>
+          <button onclick="addStageField('${p.id}','${stageObj.id}')">+ Add</button>
+        </div>` : '';
+      fieldsHtml = `<div class="modcard" style="margin-top:8px">${fields || '<div style="color:var(--dim);font-size:12.5px;padding:4px 0">No fields or documents required for this step yet.</div>'}${addFieldBtn}</div>`;
+    }
+    return `<div class="pstage ${cls}"><div class="pnum">${cls==='done'?'✓':n}</div><div style="flex:1"><div class="pname">${n}. ${stageObj.name}${renameBtn}</div>${subTxt}${fieldsHtml}</div><span class="ptag">${tag}</span></div>`;
+  }).join('');
+  const addStepControls = editable ? `<div class="plan-actions" style="margin-bottom:14px">
+      <button class="btn-outline" onclick="addStage('${p.id}', DATA.projects.find(x=>x.id==='${p.id}').stages[${p.stage-1}].id)">+ Insert step after current</button>
+      <button class="btn-outline" onclick="addStage('${p.id}','end')">+ Add step at the end</button>
+    </div>` : '';
+  el.innerHTML = `
+    <div class="plan-hero">
+      <div class="ph-top">
+        <div class="ph-ic">${p.name[0]}</div>
+        <div><h3>${p.name}</h3><p>${SERVICE_NAME[p.service]||p.service} · ${p.site} · ${p.tag} · ${p.val}</p></div>
+      </div>
+      <div class="ph-meta">
+        <div><span>Job ID</span><b>${p.id}</b></div>
+        <div><span>Current stage</span><b>Stage ${p.stage} of ${p.stages.length}</b></div>
+        <div><span>Delivery</span><b>${p.delivery}</b></div>
+      </div>
+    </div>
+    ${addStepControls}
+    <div class="plan-track">${stages}</div>
+    <div class="plan-actions">
+      <button class="btn" onclick="advance('${p.id}')">${stageActionText(p.stages[p.stage-1])} →</button>
+      <button class="btn-outline" onclick="notifyMD('${p.id}')">Notify MD</button>
+    </div>
+    ${ME.role==='supervisor' ? poBuilderHTML(p) : ''}`;
+}
+async function addStage(projectId, afterStageId){
+  const name = prompt('Name for the new process step:');
+  if(!name || !name.trim()) return;
+  try{
+    const r = await apiFetch('/api/projects/'+projectId+'/stage/add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name.trim(), afterStageId})});
+    const j = await r.json();
+    if(!r.ok){ toast('Not allowed', j.error||'Could not add step'); return; }
+    toast('Step added', `"${name.trim()}" added to the process`);
+    await load();
+  }catch{ toast('Network error','Could not reach server'); }
+}
+async function renameStage(projectId, stageId, currentName){
+  const name = prompt('Rename this step:', currentName);
+  if(name===null || !name.trim() || name.trim()===currentName) return;
+  try{
+    const r = await apiFetch('/api/projects/'+projectId+'/stage/rename',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({stageId, name:name.trim()})});
+    const j = await r.json();
+    if(!r.ok){ toast('Not allowed', j.error||'Could not rename'); return; }
+    toast('Renamed', `Now called "${name.trim()}"`);
+    await load();
+  }catch{ toast('Network error','Could not reach server'); }
+}
+async function addStageField(projectId, stageId){
+  const labelEl = document.getElementById(`newfld-${projectId}-${stageId}`);
+  const typeEl = document.getElementById(`newfldtype-${projectId}-${stageId}`);
+  const label = (labelEl.value||'').trim();
+  if(!label) return;
+  try{
+    const r = await apiFetch('/api/projects/'+projectId+'/stage/field/add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({stageId, label, type:typeEl.value})});
+    const j = await r.json();
+    if(!r.ok){ toast('Not allowed', j.error||'Could not add field'); return; }
+    toast('Added', `"${label}" added to this step`);
+    clearDrafts([`newfld-${projectId}-${stageId}`]);
+    await load();
+  }catch{ toast('Network error','Could not reach server'); }
+}
+async function saveFieldValue(projectId, stageId, fieldId){
+  const el = document.getElementById(`val-${projectId}-${stageId}-${fieldId}`);
+  const value = el.value;
+  try{
+    const r = await apiFetch('/api/projects/'+projectId+'/stage/field/value',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({stageId, fieldId, value})});
+    const j = await r.json();
+    if(!r.ok){ toast('Not allowed', j.error||'Could not save'); return; }
+    toast('Saved', 'Reflected in the MD dashboard');
+    clearDrafts([`val-${projectId}-${stageId}-${fieldId}`]);
+    await load();
+  }catch{ toast('Network error','Could not reach server'); }
+}
+async function uploadStageFile(projectId, stageId, fieldId){
+  const el = document.getElementById(`upl-${projectId}-${stageId}-${fieldId}`);
+  const file = el.files && el.files[0];
+  if(!file){ toast('No file chosen','Pick a file first'); return; }
+  const fd = new FormData();
+  fd.append('stageId', stageId); fd.append('fieldId', fieldId); fd.append('file', file);
+  try{
+    const r = await apiFetch('/api/projects/'+projectId+'/stage/field/upload',{method:'POST', body:fd});
+    const j = await r.json();
+    if(!r.ok){ toast('Not allowed', j.error||'Could not upload'); return; }
+    toast('Uploaded', `${file.name} saved — reflected in the MD dashboard`);
+    await load();
+  }catch{ toast('Network error','Could not reach server'); }
+}
+const PO_STATUS_COLOR = {Draft:'pending', Sent:'pending', Acknowledged:'pending', Received:'done'};
+function poIn(id,ph,extra=''){ return `<input id="${id}" placeholder="${ph}" style="${extra}">`; }
+function poItemRowHTML(projectId, i){
+  return `<div class="po-item-row" data-i="${i}" style="display:flex;gap:6px;margin-bottom:6px">
+    ${poIn(`po-it-name-${projectId}-${i}`,'Item name','flex:1.4')}
+    ${poIn(`po-it-desc-${projectId}-${i}`,'Description','flex:1.6')}
+    ${poIn(`po-it-qty-${projectId}-${i}`,'Qty','width:55px')}
+    ${poIn(`po-it-price-${projectId}-${i}`,'Unit price','width:85px')}
+    <button class="btn-outline" style="padding:6px 10px" onclick="removePoItemRow(this,'${projectId}',${i})" title="Remove">✕</button>
+  </div>`;
+}
+function removePoItemRow(btn, projectId, i){
+  btn.closest('.po-item-row').remove();
+  clearDrafts([`po-it-name-${projectId}-${i}`,`po-it-desc-${projectId}-${i}`,`po-it-qty-${projectId}-${i}`,`po-it-price-${projectId}-${i}`]);
+  savePoDraftRowIds(projectId, poDraftRowIds(projectId).filter(x=>x!==i));
+}
+let poItemCounter = 0;
+function addPoItemRow(projectId){
+  const id = ++poItemCounter;
+  const wrap = document.getElementById(`po-items-wrap-${projectId}`);
+  wrap.insertAdjacentHTML('beforeend', poItemRowHTML(projectId, id));
+  const rowIds = poDraftRowIds(projectId); rowIds.push(id); savePoDraftRowIds(projectId, rowIds);
+  bindDrafts(wrap);
+}
+function poBuilderHTML(p){
+  const items = p.po||[];
+  const rows = items.length ? items.map(po=>{
+    const t = po.items.reduce((s,it)=>s+(it.qty*it.unitPrice),0)*(1+(po.taxPercent||0)/100)+(po.shippingFee||0);
+    return `<div class="mitem">
+      <div class="mn"><b>${po.id}</b> — ${po.vendor.name}<div style="color:var(--dim);font-weight:400;font-size:11.5px;margin-top:2px">${po.items.map(it=>it.name).join(', ')}${po.emailedTo?` · <span style="color:var(--green)">emailed to ${po.emailedTo}</span>`:''}</div></div>
+      <div class="ma">₹${t.toLocaleString('en-IN',{maximumFractionDigits:0})}</div>
+      <a class="btn-outline" style="padding:6px 10px;text-decoration:none" href="/api/projects/${p.id}/po/${po.id}/pdf">Download PDF</a>
+      <button class="mstat ${po.status==='Received'?'done':'pending'}" ${po.status==='Received'?'disabled':`onclick="advancePO('${p.id}','${po.id}')"`}>${po.status}</button>
+    </div>`;
+  }).join('') : `<div style="color:var(--dim);font-size:12.5px;padding:6px 0">No purchase orders raised yet.</div>`;
+  let savedRows = poDraftRowIds(p.id);
+  if(!savedRows.length){ savedRows = [1]; savePoDraftRowIds(p.id, savedRows); }
+  poItemCounter = Math.max(...savedRows);
+  return `
+    <div class="sec-lab">Purchase orders — Supervisor &amp; MD only</div>
+    <div class="modcard">
+      ${rows}
+      <div style="display:flex;gap:8px;margin:12px 0 8px">
+        ${poIn(`po-vendor-name-${p.id}`,'Vendor name','flex:1')}
+        ${poIn(`po-vendor-phone-${p.id}`,'Vendor phone','flex:1')}
+        ${poIn(`po-vendor-email-${p.id}`,'Vendor email','flex:1')}
+      </div>
+      <div style="margin-bottom:8px">${poIn(`po-vendor-address-${p.id}`,'Vendor address','width:100%')}</div>
+      <div style="display:flex;gap:8px;margin-bottom:8px">
+        ${poIn(`po-shipvia-${p.id}`,'Ship via','flex:1')}
+        ${poIn(`po-fob-${p.id}`,'FOB','flex:1')}
+        ${poIn(`po-shipterms-${p.id}`,'Shipping terms','flex:1')}
+      </div>
+      <div style="font-size:11px;color:var(--dim);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin:10px 0 6px">Items</div>
+      <div id="po-items-wrap-${p.id}">${savedRows.map(i=>poItemRowHTML(p.id,i)).join('')}</div>
+      <button class="btn-outline" style="margin-bottom:10px" onclick="addPoItemRow('${p.id}')">+ Add item</button>
+      <div class="maddrow" style="align-items:center">
+        ${poIn(`po-tax-${p.id}`,'Tax %','width:80px')}
+        ${poIn(`po-shipfee-${p.id}`,'Shipping fee','width:110px')}
+        <button onclick="raisePO('${p.id}')">Raise PO</button>
+      </div>
+    </div>`;
+}
+function collectPoItems(projectId){
+  return Array.from(document.querySelectorAll(`#po-items-wrap-${projectId} .po-item-row`)).map(row=>{
+    const i = row.dataset.i;
+    return {
+      name: (document.getElementById(`po-it-name-${projectId}-${i}`)?.value||'').trim(),
+      desc: (document.getElementById(`po-it-desc-${projectId}-${i}`)?.value||'').trim(),
+      qty: document.getElementById(`po-it-qty-${projectId}-${i}`)?.value||0,
+      unitPrice: document.getElementById(`po-it-price-${projectId}-${i}`)?.value||0
+    };
+  }).filter(it=>it.name);
+}
+async function raisePO(id){
+  const g = elId => (document.getElementById(elId)?.value||'').trim();
+  const vendorName = g(`po-vendor-name-${id}`);
+  const items = collectPoItems(id);
+  if(!vendorName || !items.length){ toast('Missing details', 'Vendor name and at least one item are required'); return; }
+  const body = {
+    vendor: { name:vendorName, phone:g(`po-vendor-phone-${id}`), email:g(`po-vendor-email-${id}`), address:g(`po-vendor-address-${id}`) },
+    shipVia: g(`po-shipvia-${id}`), fob: g(`po-fob-${id}`), shippingTerms: g(`po-shipterms-${id}`),
+    taxPercent: g(`po-tax-${id}`), shippingFee: g(`po-shipfee-${id}`),
+    items
+  };
+  try{
+    const r = await apiFetch('/api/projects/'+id+'/po/create',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
+    const j = await r.json();
+    if(!r.ok){ toast('Not allowed', j.error||'Could not raise PO'); return; }
+    if(j.email && j.email.sent) toast('PO raised & emailed', `Sent to ${vendorName}'s inbox — reflected in the MD dashboard`);
+    else toast('PO raised', `Reflected in the MD dashboard — email not sent (${(j.email&&j.email.reason)||'no vendor email'})`);
+    clearPoDraft(id);
+    await load();
+  }catch{ toast('Network error','Could not reach server'); }
+}
+function clearPoDraft(projectId){
+  const rowIds = poDraftRowIds(projectId);
+  const fieldIds = [`po-vendor-name-${projectId}`,`po-vendor-phone-${projectId}`,`po-vendor-email-${projectId}`,`po-vendor-address-${projectId}`,`po-shipvia-${projectId}`,`po-fob-${projectId}`,`po-shipterms-${projectId}`,`po-tax-${projectId}`,`po-shipfee-${projectId}`];
+  rowIds.forEach(i=>fieldIds.push(`po-it-name-${projectId}-${i}`,`po-it-desc-${projectId}-${i}`,`po-it-qty-${projectId}-${i}`,`po-it-price-${projectId}-${i}`));
+  clearDrafts(fieldIds);
+  localStorage.removeItem(DRAFT_PREFIX+'po-rows-'+projectId);
+}
+async function advancePO(id, poId){
+  try{
+    const r = await apiFetch('/api/projects/'+id+'/po/status',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({poId})});
+    const j = await r.json();
+    if(!r.ok){ toast('Not allowed', j.error||'Could not update PO'); return; }
+    await load();
+  }catch{ toast('Network error','Could not reach server'); }
+}
 async function advance(id){
-  const r = await fetch('/api/warehouse/'+id+'/advance',{method:'POST'});
+  const r = await apiFetch('/api/projects/'+id+'/advance',{method:'POST'});
   const j = await r.json();
   if(!r.ok){ toast('Not allowed', j.error||'Your role cannot update this stage'); return; }
   DATA.updates = j.updates || DATA.updates;
   toast('Update saved', 'Reflected in the MD dashboard');
   await load();
 }
-function logout(){ fetch('/api/logout',{method:'POST'}).finally(()=>location.href='/login'); }
+async function notifyMD(id){
+  const p = DATA.projects.find(x=>x.id===id);
+  const msg = prompt('Message to the Managing Director about '+(p?p.name:'this project')+':', 'Plan update — please review.');
+  if(msg===null) return;
+  try{
+    const r = await apiFetch('/api/projects/'+id+'/notify',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({message:msg})});
+    if(!r.ok){ toast('Could not notify', 'Try again'); return; }
+    toast('MD notified', 'Your update was sent to the Managing Director.');
+  }catch{ toast('Network error','Could not reach server'); }
+}
+function logout(){ if(pollTimer) clearInterval(pollTimer); apiFetch('/api/logout',{method:'POST'}).finally(()=>location.href='/login'); }
+function logout(){ if(pollTimer) clearInterval(pollTimer); apiFetch('/api/logout',{method:'POST'}).finally(()=>location.href='/login'); }
 
 let tt;
 function toast(title, sub){

@@ -108,6 +108,35 @@
   .ch-facts div span{font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.07em;font-weight:600}
   .ch-facts div b{display:block;font-size:13.5px;font-weight:700;margin-top:3px}
   .ch-facts .mono b{font-family:var(--mono)}
+  .assign-select{font-family:var(--sans);font-size:13.5px;font-weight:700;color:var(--text);background:var(--surface2);border:1px solid var(--border);border-radius:7px;padding:4px 8px;margin-top:3px;cursor:pointer;outline:none;transition:border-color .15s,box-shadow .15s;max-width:200px}
+  .assign-select:hover{border-color:var(--accent)}
+  .assign-select:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(228,97,15,.12)}
+  .assign-select.sm{font-size:11.5px;padding:3px 8px;max-width:180px;margin-top:0}
+  .tbtn-mini{font-family:var(--sans);font-size:11px;font-weight:700;padding:4px 12px;border-radius:20px;border:1px solid var(--accent);background:rgba(228,97,15,.08);color:var(--accent);cursor:pointer;transition:background .15s,color .15s}
+  .tbtn-mini:hover{background:rgba(228,97,15,.16)}
+  .tbtn-mini.active{background:var(--accent);color:#fff}
+  .stage-assign{display:flex;align-items:center;gap:8px;margin-top:9px}
+  .stage-assign span{font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em;font-weight:700}
+
+  /* new-project intake form (MD only) */
+  .np-panel{background:var(--surface);border:1px solid var(--border);border-radius:13px;box-shadow:var(--shadow);padding:18px 20px;margin-bottom:16px}
+  .np-panel h4{font-size:13.5px;font-weight:700;margin-bottom:3px}
+  .np-panel .np-sub{font-size:12px;color:var(--muted);margin-bottom:14px}
+  .np-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:14px}
+  .np-grid label{display:block;font-size:11px;font-weight:600;color:var(--muted);margin-bottom:5px}
+  .np-grid input{width:100%;padding:9px 11px;border:1px solid var(--border);border-radius:8px;font-family:var(--sans);font-size:13px;color:var(--text);background:var(--surface2);outline:none;transition:border-color .15s,box-shadow .15s}
+  .np-grid input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(228,97,15,.12)}
+  .np-submit{font-family:var(--sans);font-size:12.5px;font-weight:700;padding:9px 16px;border-radius:9px;border:none;background:var(--accent);color:#fff;cursor:pointer;transition:background .15s}
+  .np-submit:hover{background:var(--accent2)}
+  @media(max-width:600px){.np-grid{grid-template-columns:1fr}}
+
+  /* toast */
+  .toast{position:fixed;bottom:26px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--surface);border:1px solid var(--border);border-radius:11px;padding:13px 18px;display:flex;align-items:center;gap:11px;z-index:50;opacity:0;transition:opacity .25s,transform .25s;box-shadow:0 14px 40px rgba(16,24,40,.16);max-width:90vw}
+  .toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+  .toast .ti{width:24px;height:24px;border-radius:7px;background:rgba(15,157,88,.14);display:grid;place-items:center;flex-shrink:0}
+  .toast .ti svg{width:14px;height:14px}
+  .toast b{font-size:12.5px;font-weight:700}
+  .toast small{display:block;color:var(--dim);font-size:11px;margin-top:1px}
   .ch-note{margin-top:16px;background:rgba(217,119,6,.1);border:1px solid rgba(217,119,6,.28);color:#9c5406;border-radius:10px;padding:11px 14px;font-size:12.5px;font-weight:500;display:flex;align-items:center;gap:9px}
   .ch-note svg{width:16px;height:16px;flex-shrink:0}
   .track-head{display:flex;align-items:baseline;justify-content:space-between;margin:6px 2px 16px}
@@ -217,6 +246,15 @@
       </div>
       <div id="mdOverview"></div>
 
+      <div class="ov-lab">Purchase Orders — Supervisor &amp; Managing Director only</div>
+      <div class="panel" style="padding:16px;margin-bottom:22px">
+        <label style="display:block;font-size:11px;font-weight:700;color:var(--dim);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px">Select a client to raise or view a PO for</label>
+        <select id="homePoSelect" onchange="selectHomePoProject(this.value)" style="width:100%;padding:11px 13px;border:1px solid var(--border);border-radius:9px;font-family:var(--sans);font-size:13.5px;background:var(--surface2);margin-bottom:14px">
+          <option value="">Choose a client…</option>
+        </select>
+        <div id="homePoBody"></div>
+      </div>
+
       <div class="ov-lab">Your Services</div>
       <div class="grid" id="grid"></div>
     </section>
@@ -229,29 +267,44 @@
 
 <script>
 function icon(p,stroke='currentColor',w=2){return `<svg viewBox="0 0 24 24" fill="none" stroke="${stroke}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`}
+
+/* ---- Draft persistence: whatever's mid-typed in a form survives a refresh (localStorage,
+   keyed by the input's own id) — cleared once the form is actually submitted successfully. ---- */
+const DRAFT_PREFIX = 'sw-draft:';
+function bindDrafts(root){
+  if(!root) return;
+  root.querySelectorAll('input[id], select[id], textarea[id]').forEach(el=>{
+    if(el.type==='file') return; // browsers never let you restore a file input's value — not persistable
+    const key = DRAFT_PREFIX + el.id;
+    const saved = localStorage.getItem(key);
+    if(saved!==null && !el.value) el.value = saved;
+    const ev = el.tagName==='SELECT' ? 'change' : 'input';
+    el.addEventListener(ev, ()=> localStorage.setItem(key, el.value));
+  });
+}
+function clearDrafts(ids){ ids.forEach(id=>localStorage.removeItem(DRAFT_PREFIX+id)); }
+function poDraftRowIds(projectId){ try{ return JSON.parse(localStorage.getItem(DRAFT_PREFIX+'po-rows-'+projectId)||'[]'); }catch{ return []; } }
+function savePoDraftRowIds(projectId, ids){ localStorage.setItem(DRAFT_PREFIX+'po-rows-'+projectId, JSON.stringify(ids)); }
 const arrow='<path d="M5 12h14M12 5l7 7-7 7"/>';
 const back='<path d="M19 12H5M12 19l-7-7 7-7"/>';
 
 /* Sunworld's 6 services */
 const SERVICES = [
-  {id:'warehouse', name:'Warehouse Construction', col:'var(--blue)', bg:'var(--blue-bg)',
+  {id:'warehouse', name:'Civil Construction', col:'var(--blue)', bg:'var(--blue-bg)',
    ico:'<path d="M3 21V8l9-4 9 4v13"/><path d="M3 21h18"/><path d="M8 21v-6h8v6"/><path d="M8 12h8"/>',
-   desc:'Large-span storage and distribution warehouses and cold stores.'},
-  {id:'industrial', name:'Industrial Construction', col:'var(--violet)', bg:'var(--violet-bg)',
-   ico:'<path d="M3 21h18V10l-6 4v-4l-6 4V6H3z"/><path d="M8 21v-4M12 21v-4M16 21v-4"/>',
-   desc:'Turnkey industrial buildings, process units and civil works.'},
-  {id:'pfis', name:'Pre-Fabricated Industrial Shed', col:'var(--amber)', bg:'var(--amber-bg)',
-   ico:'<path d="M2 21V12l10-6 10 6v9"/><path d="M2 21h20"/><path d="M9 21v-6h6v6"/>',
-   desc:'Pre-engineered industrial sheds with fast-track erection.'},
-  {id:'pffs', name:'Pre-Fabricated Factory Shed', col:'var(--green)', bg:'var(--green-bg)',
-   ico:'<path d="M2 21V13l6-4 6 4v8"/><path d="M14 21V10l6-3v14"/><path d="M2 21h20"/>',
-   desc:'Factory sheds built from prefabricated steel structures.'},
-  {id:'peb', name:'PEB Steel Building Construction', col:'var(--teal)', bg:'var(--teal-bg)',
+   desc:'Full-scope civil construction — foundation to finishing, for warehouses, factories and industrial buildings.'},
+  {id:'steel', name:'Steel Construction', col:'var(--teal)', bg:'var(--teal-bg)',
    ico:'<path d="M4 21V7l8-4 8 4v14"/><path d="M4 11h16"/><path d="M9 21v-6h6v6"/>',
-   desc:'Pre-engineered steel buildings — columns, rafters, cladding.'},
-  {id:'epoxy', name:'Epoxy Flooring', col:'var(--rose)', bg:'var(--rose-bg)',
+   desc:'Structural steel fabrication and erection — columns, rafters, purlins and cladding.'},
+  {id:'epoxy', name:'Epoxy Flooring', col:'var(--rose)', bg:'var(--rose-bg)', sub:'epoxy',
    ico:'<rect x="3" y="3" width="18" height="18" rx="1"/><path d="M3 9h18M3 15h18M9 3v18M15 3v18"/>',
    desc:'Industrial epoxy floor systems — surface prep to top coat.'},
+  {id:'interior', name:'Interior', col:'var(--violet)', bg:'var(--violet-bg)',
+   ico:'<path d="M4 18v-4a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v4"/><path d="M2 18h20v3H2z"/><path d="M4 14V9a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v5"/>',
+   desc:'Interior fit-out and finishing — partitions, false ceiling, paint and furnishing.'},
+  {id:'exterior', name:'Exterior', col:'var(--green)', bg:'var(--green-bg)',
+   ico:'<path d="M3 20h18"/><path d="M6 20V8l6-5 6 5v12"/><path d="M10 20v-6h4v6"/>',
+   desc:'Exterior facade, cladding and landscaping work.'},
 ];
 const svcById = id => SERVICES.find(s=>s.id===id);
 
@@ -263,6 +316,13 @@ const HEALTH = {
 };
 const pin = '<path d="M12 21s7-6.3 7-11a7 7 0 1 0-14 0c0 4.7 7 11 7 11z"/><circle cx="12" cy="10" r="2.5"/>';
 const warnI = '<path d="M12 9v4M12 17h.01M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>';
+
+/* teams the MD can assign a project to */
+const TEAMS = ['Unassigned','Team A — Suresh M.','Team B — Karthik R.','Team C — Manoj V.','Team D — Praveen K.'];
+
+/* people the MD can assign to an individual task/stage — each maps to a real login */
+const PEOPLE = ['Unassigned', 'Site Manager', 'Supervisor'];
+function personFor(c, stageId){ return (c.assignees && c.assignees[stageId]) || 'Unassigned'; }
 
 /* the 10-stage lifecycle, plus the two execution sub-stage sets */
 const STAGES = ['Enquiry & Survey','Quotation','Work Order','Drawings','Procurement','Site Execution','Quality / QC','Client Update','Invoicing','Handover'];
@@ -281,40 +341,7 @@ const STAGE_DOC = [
 const STEEL_SUB = ['Foundation','Column & Beam Erection','Roof Purlin & Sheeting','Wall Cladding','MEP Rough-in','Flooring','Finishing & Handover'];
 const EPOXY_SUB = ['Surface Preparation','Primer Coat','Base Coat','Top Coat','Cure & Inspection','Handover'];
 
-/* clients under each service */
-const CLIENTS = {
-  warehouse:[
-    {name:'Vellore Logistics Park',        site:'Ranipet, TN',       tag:'Warehouse · 42,000 sq ft', val:'₹1.85 Cr', status:'warn', id:'SW-2026-014', stage:6, sub:2, pct:52, team:'Team B — Karthik R.', start:'04 Apr 2026', delivery:'12 Aug 2026', note:'Drawing R2 approved, but site is building to R1 — resolve before wall cladding.'},
-    {name:'Sri Balaji Warehousing',        site:'Hosur, TN',         tag:'Warehouse · 60,000 sq ft', val:'₹3.10 Cr', status:'late', id:'SW-2026-005', stage:6, sub:5, pct:74, team:'Team A — Suresh M.', start:'02 Feb 2026', delivery:'30 Jun 2026', note:'4 days behind on Flooring sub-stage — delivery date at risk.'},
-    {name:'Metro Fresh Distribution',      site:'Chennai, TN',       tag:'Cold-storage warehouse',   val:'₹2.75 Cr', status:'ok',   id:'SW-2026-002', stage:9, sub:0, pct:92, team:'Team A — Suresh M.', start:'12 Jan 2026', delivery:'20 Jun 2026'},
-    {name:'Aditya Pharma Godown',          site:'Sriperumbudur, TN', tag:'Pharma warehouse',         val:'₹2.10 Cr', status:'ok',   id:'SW-2026-001', stage:10, sub:0, pct:100, team:'Team A — Suresh M.', start:'05 Jan 2026', delivery:'Handed over'},
-    {name:'Rasi Seeds Storage Warehouse',  site:'Attur, TN',         tag:'Seed-storage warehouse',   val:'₹1.45 Cr', status:'ok',   id:'SW-2026-034', stage:2, sub:0, pct:8, team:'Unassigned', start:'30 Jun 2026', delivery:'22 Dec 2026'},
-  ],
-  industrial:[
-    {name:'Nandhini Foods Pack Unit',      site:'Namakkal, TN',      tag:'Food processing unit',     val:'₹1.20 Cr', status:'ok',   id:'SW-2026-025', stage:3, sub:0, pct:12, team:'Team B — Karthik R.', start:'25 Jun 2026', delivery:'18 Nov 2026'},
-    {name:'Ashok Leyland Ancillary Unit',  site:'Hosur, TN',         tag:'Auto-ancillary plant',     val:'₹3.90 Cr', status:'ok',   id:'SW-2026-030', stage:6, sub:1, pct:44, team:'Team A — Suresh M.', start:'10 Mar 2026', delivery:'14 Oct 2026'},
-    {name:'Sakthi Sugars Boiler House',    site:'Sankagiri, TN',     tag:'Process civil works',      val:'₹2.05 Cr', status:'warn', id:'SW-2026-036', stage:5, sub:0, pct:26, team:'Team C — Manoj V.', start:'12 May 2026', delivery:'20 Jan 2027', note:'Awaiting structural steel delivery before erection.'},
-  ],
-  pfis:[
-    {name:'GreenLeaf Agro Sheds',          site:'Salem, TN',         tag:'Agro industrial shed',     val:'₹58.0 L',  status:'warn', id:'SW-2026-018', stage:5, sub:0, pct:30, team:'Team C — Manoj V.', start:'28 Apr 2026', delivery:'15 Aug 2026', note:'Purlin steel (critical) not yet received — site on hold.'},
-    {name:'Suguna Poultry Feed Shed',      site:'Udumalpet, TN',     tag:'Poultry feed shed',        val:'₹76.0 L',  status:'ok',   id:'SW-2026-032', stage:3, sub:0, pct:15, team:'Team C — Manoj V.', start:'18 Jun 2026', delivery:'02 Dec 2026'},
-  ],
-  pffs:[
-    {name:'Coromandel Steel Yard',         site:'Cuddalore, TN',     tag:'Factory shed',             val:'₹72.0 L',  status:'ok',   id:'SW-2026-011', stage:6, sub:4, pct:55, team:'Team C — Manoj V.', start:'20 Mar 2026', delivery:'09 Sep 2026'},
-    {name:'Lakshmi Machine Works Bay',     site:'Coimbatore, TN',    tag:'Machining bay shed',       val:'₹1.28 Cr', status:'ok',   id:'SW-2026-033', stage:7, sub:0, pct:70, team:'Team B — Karthik R.', start:'01 Feb 2026', delivery:'08 Aug 2026'},
-  ],
-  peb:[
-    {name:'Anand Dairy Cold Store',        site:'Erode, TN',         tag:'PEB cold store',           val:'₹2.40 Cr', status:'ok',   id:'SW-2026-009', stage:7, sub:0, pct:68, team:'Team A — Suresh M.', start:'11 Mar 2026', delivery:'28 Sep 2026'},
-    {name:'JK Cement Bagging Plant',       site:'Ariyalur, TN',      tag:'PEB bagging plant',        val:'₹4.20 Cr', status:'warn', id:'SW-2026-031', stage:4, sub:0, pct:22, team:'Team B — Karthik R.', start:'05 Jun 2026', delivery:'25 Jan 2027', note:'Structural GA drawing R1 awaiting client approval.'},
-  ],
-  epoxy:[
-    {name:'Kovai Textiles Unit-3',         site:'Tirupur, TN',       tag:'Epoxy floor · 18,000 sq ft', val:'₹34.0 L', status:'ok',   id:'SW-2026-021', stage:6, sub:2, pct:41, team:'Team D — Praveen K.', start:'19 May 2026', delivery:'22 Jul 2026'},
-    {name:'Deccan Auto Components',        site:'Krishnagiri, TN',   tag:'Epoxy floor · 6,800 sq ft',  val:'₹41.0 L', status:'warn', id:'SW-2026-023', stage:4, sub:0, pct:18, team:'Team D — Praveen K.', start:'01 Jun 2026', delivery:'05 Oct 2026', note:'Floor drawing R1 awaiting client approval for 6 days.'},
-    {name:'PVR Logistics Epoxy Bay',       site:'Sriperumbudur, TN', tag:'Epoxy bay flooring',         val:'₹52.0 L', status:'ok',   id:'SW-2026-035', stage:6, sub:3, pct:63, team:'Team D — Praveen K.', start:'08 Apr 2026', delivery:'19 Jul 2026'},
-  ],
-};
-
-/* render the 6 blocks */
+/* render the 5 service blocks */
 function renderGrid(){
   document.getElementById('grid').innerHTML = SERVICES.map(s=>`
     <div class="block" onclick="openService('${s.id}')">
@@ -325,13 +352,46 @@ function renderGrid(){
     </div>`).join('');
 }
 
-/* live warehouse data (fed by the team logins) */
+/* live project data — every service is now backed by the server */
 let WHDATA = {projects:[], updates:[]};
-let whPoll = null, whView = null, whClientIdx = null;
+/* CSRF: every state-changing request must echo back this session's own token (set at boot from
+   /api/me). apiFetch is a drop-in replacement for fetch() that adds it automatically. */
+let CSRF = '';
+function apiFetch(url, opts={}){
+  opts.headers = Object.assign({}, opts.headers, CSRF ? {'X-CSRF-Token':CSRF} : {});
+  return fetch(url, opts);
+}
+let whPoll = null, whView = null, whClientId = null, currentServiceId = null;
+let prevReadyIds = null;
+let lastSeenUpdateAt = null;
 async function loadWH(){
-  const r = await fetch('/api/warehouse');
+  const r = await fetch('/api/projects');
   if(r.status===401){ location.href='/login'; return; }
   if(r.ok) WHDATA = await r.json();
+  checkReadyForAssignment();
+  checkManualNotifications();
+}
+/* notify the MD the moment a project reaches Site Execution still unassigned (auto-detected) */
+function checkReadyForAssignment(){
+  const readyNow = new Set(WHDATA.projects.filter(p=>p.stage>=6 && p.team==='Unassigned').map(p=>p.id));
+  if(prevReadyIds!==null){
+    readyNow.forEach(id=>{
+      if(!prevReadyIds.has(id)){
+        const p = WHDATA.projects.find(x=>x.id===id);
+        if(p) toast('Ready for assignment', `Coordinator completed setup for ${p.name} — assign a team.`);
+      }
+    });
+  }
+  prevReadyIds = readyNow;
+}
+/* notify the MD when a team member explicitly hits "Notify MD" (not just inferred from stage changes) */
+function checkManualNotifications(){
+  const ups = WHDATA.updates || [];
+  const fresh = ups.filter(u=>u.notify && (lastSeenUpdateAt===null || u.at>lastSeenUpdateAt));
+  if(lastSeenUpdateAt!==null){
+    fresh.slice().reverse().forEach(u=>toast('Update from the team', u.text));
+  }
+  if(ups.length) lastSeenUpdateAt = Math.max(...ups.map(u=>u.at));
 }
 function timeAgo(ts){
   const s=Math.floor((Date.now()-ts)/1000);
@@ -344,15 +404,15 @@ function updatesFeedHTML(){
   const ups = WHDATA.updates || [];
   const body = ups.length
     ? ups.map(u=>`<div class="up"><span class="up-dot"></span><div><div class="up-txt">${u.text}</div><div class="up-time">${timeAgo(u.at)}</div></div></div>`).join('')
-    : `<div class="up-empty">No team updates yet. Open another tab, sign in as a team role (e.g. <b>site / site123</b>), complete a stage — it appears here live.</div>`;
+    : `<div class="up-empty">No team updates yet. Open another tab, sign in as Coordinator / Site Manager / Supervisor, complete a stage — it appears here live.</div>`;
   return `<div class="updates">
     <div class="updates-h"><span class="live"><i></i> Live team updates</span><span class="up-hint">auto-refreshes every few seconds</span></div>
     ${body}</div>`;
 }
 function serviceCardsHTML(id, s, list){
-  return list.map((c,i)=>{
+  return list.map(c=>{
     const h = HEALTH[c.status];
-    return `<div class="client" onclick="openClient('${id}',${i})">
+    return `<div class="client" onclick="openClient('${id}','${c.id}')">
       <div class="cl-av" style="background:${s.bg};color:${s.col}">${c.name[0]}</div>
       <div class="cl-main">
         <b>${c.name}</b>
@@ -366,49 +426,89 @@ function serviceCardsHTML(id, s, list){
     </div>`;
   }).join('');
 }
+let newProjectOpen = false;
+function toggleNewProject(id){ newProjectOpen = !newProjectOpen; renderServiceList(id); }
+function newProjectFormHTML(){
+  return `<div class="np-panel">
+    <h4>Start a new project</h4>
+    <div class="np-sub">Creates the project and notifies the Coordinator to set up the plan — enquiry, drawings, procurement and everything through to Site Execution.</div>
+    <div class="np-grid">
+      <div><label>Client name</label><input id="npName" placeholder="e.g. Kaveri Textiles Cold Store"></div>
+      <div><label>Site / location</label><input id="npSite" placeholder="e.g. Salem, TN"></div>
+      <div><label>Project type</label><input id="npTag" placeholder="e.g. Cold-storage warehouse"></div>
+      <div><label>Contract value</label><input id="npVal" placeholder="e.g. ₹1.50 Cr"></div>
+      <div><label>Expected delivery</label><input id="npDelivery" placeholder="e.g. 20 Dec 2026"></div>
+    </div>
+    <button class="np-submit" onclick="createProject('${currentServiceId}')">Create project — notify Coordinator</button>
+  </div>`;
+}
+async function createProject(serviceId){
+  const name=document.getElementById('npName').value.trim();
+  const site=document.getElementById('npSite').value.trim();
+  const tag=document.getElementById('npTag').value.trim();
+  const val=document.getElementById('npVal').value.trim();
+  const delivery=document.getElementById('npDelivery').value.trim();
+  if(!name || !site){ toast('Missing info', 'Client name and site are required'); return; }
+  try{
+    const r = await apiFetch('/api/projects/create',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({service:serviceId,name,site,tag,val,delivery})});
+    const j = await r.json();
+    if(!r.ok){ toast('Could not create project', j.error||'Try again'); return; }
+    newProjectOpen = false;
+    clearDrafts(['npName','npSite','npTag','npVal','npDelivery']);
+    toast('Project created', `${name} added — Coordinator notified to set it up.`);
+    await loadWH();
+    renderServiceList(serviceId);
+  }catch{ toast('Network error','Could not reach server'); }
+}
 function renderServiceList(id){
   const s = svcById(id);
-  const isWH = id==='warehouse';
-  const list = isWH ? WHDATA.projects : (CLIENTS[id]||[]);
-  const tag = isWH
-    ? `<span class="sample-tag" style="background:rgba(15,157,88,.12);color:#0b7a45;border-color:rgba(15,157,88,.3)"><i style="background:#0f9d58"></i>Live data</span>`
-    : `<span class="sample-tag"><i></i>Sample data</span>`;
+  const list = WHDATA.projects.filter(p=>p.service===id);
+  const tag = `<span class="sample-tag" style="background:rgba(15,157,88,.12);color:#0b7a45;border-color:rgba(15,157,88,.3)"><i style="background:#0f9d58"></i>Live data</span>`;
   document.getElementById('serviceBody').innerHTML = `
     <div class="crumb" onclick="showDash()">${icon(back,'currentColor',2)} Back to services</div>
     <div class="svc-hero">
       <div class="h-ic" style="background:${s.bg}">${icon(s.ico,s.col,2)}</div>
       <div><h2>${s.name}</h2><div class="d">${s.desc}</div></div>
     </div>
-    ${isWH ? updatesFeedHTML() : ''}
+    ${updatesFeedHTML()}
     <div class="clients-head">
       <h3>Clients</h3>
       <span><span class="cnt">${list.length} client${list.length!==1?'s':''} in this service</span>${tag}</span>
     </div>
-    <div class="clients">${serviceCardsHTML(id, s, list)}</div>`;
+    <button class="tbtn-mini ${newProjectOpen?'active':''}" style="margin-bottom:14px" onclick="toggleNewProject('${id}')">${newProjectOpen?'Cancel':'+ New Project'}</button>
+    ${newProjectOpen ? newProjectFormHTML() : ''}
+    ${list.length ? `<div class="clients">${serviceCardsHTML(id, s, list)}</div>` : `<div class="inside-note">${icon('<path d="M12 5v14M5 12h14"/>',s.col,1.6)}<b>No clients yet in ${s.name}</b><span>Click "+ New Project" above to add your first one.</span></div>`}`;
+  bindDrafts(document.getElementById('serviceBody'));
 }
 function startWHPoll(){
   stopWHPoll();
   whPoll = setInterval(async ()=>{
     await loadWH();
-    if(whView==='list') renderServiceList('warehouse');
-    else if(whView==='client' && whClientIdx!=null) renderClient('warehouse', whClientIdx);
+    // don't blow away the new-project form (and whatever the MD is mid-typing) while it's open
+    if(whView==='list'){ if(!newProjectOpen) renderServiceList(currentServiceId); }
+    else if(whView==='client' && whClientId!=null){
+      // don't blow away a PO/field/stage-name input the MD is mid-typing when the 4s poll fires
+      const typingPO = document.activeElement && /^(po-|newfld-|val-|upl-)/.test(document.activeElement.id||'');
+      if(!typingPO) renderClient(currentServiceId, whClientId);
+    }
   }, 4000);
 }
 function stopWHPoll(){ if(whPoll){ clearInterval(whPoll); whPoll=null; } }
 
-/* go inside a service → show all clients in that service */
+/* go inside a service → show all clients in that service (every service is live now) */
 async function openService(id){
   stopWHPoll(); stopHomePoll();
-  if(id==='warehouse') await loadWH();
+  newProjectOpen = false;
+  currentServiceId = id;
+  await loadWH();
   renderServiceList(id);
   document.getElementById('view-dash').classList.remove('on');
   document.getElementById('view-service').classList.add('on');
   window.scrollTo({top:0});
-  if(id==='warehouse'){ whView='list'; whClientIdx=null; startWHPoll(); }
-  else { whView=null; }
+  whView='list'; whClientId=null; startWHPoll();
 }
 function showDash(){
-  stopWHPoll(); whView=null; whClientIdx=null;
+  stopWHPoll(); whView=null; whClientId=null; currentServiceId=null;
   document.getElementById('view-service').classList.remove('on');
   document.getElementById('view-dash').classList.add('on');
   loadWH().then(renderOverview);
@@ -416,177 +516,237 @@ function showDash(){
   window.scrollTo({top:0});
 }
 function resetDemo(){
-  if(!confirm('Reset the Warehouse demo? This restores all projects and clears the team updates.'))return;
-  fetch('/api/reset',{method:'POST'}).finally(()=>location.reload());
+  if(!confirm('Reset the demo? This restores all projects across every service and clears the team updates.'))return;
+  apiFetch('/api/reset',{method:'POST'}).finally(()=>location.reload());
 }
 
-/* ---- whole-project detail: materials, payments, documents (derived from stage) ---- */
+/* ---- whole-project detail: materials, payments, documents — real, empty-by-default data,
+   filled in only by whoever the MD has assigned to that work area (or the MD directly) ---- */
 function parseLakhs(v){ const m=(v||'').match(/([\d.]+)\s*(Cr|L)/i); return m ? parseFloat(m[1])*(/cr/i.test(m[2])?100:1) : 0; }
 function fmtL(l){ return l>=100 ? '₹'+(l/100).toFixed(2)+' Cr' : '₹'+l.toFixed(1)+' L'; }
 const MAT_ICO='<path d="M3 7l9-4 9 4-9 4z"/><path d="M3 7v10l9 4 9-4V7"/><path d="M12 11v10"/>';
 const DOC_ICO='<path d="M4 3h11l5 5v13H4z"/><path d="M15 3v5h5"/>';
-
-function matStatus(c, si){
-  if(c.stage>6) return ['Received & used','ps-green'];
-  if(c.stage<5) return ['Planned','ps-grey'];
-  if(c.stage===5) return ['Ordered','ps-blue'];
-  if(si < c.sub) return ['Received & used','ps-green'];
-  if(si === c.sub) return ['On site','ps-amber'];
-  return ['Ordered','ps-blue'];
+const MODULE_LABEL = {progress:'Project Progress', materials:'Materials & Procurement', payments:'Payment Milestones', documents:'Document Center'};
+const ROLE_LABEL = {'':'Unassigned', coordinator:'Coordinator', sitemanager:'Site Manager', supervisor:'Supervisor'};
+function moduleAssignHTML(sid, projectId, module, current){
+  return `<select class="assign-select sm" onchange="assignModule('${sid}','${projectId}','${module}',this.value)">
+    ${Object.keys(ROLE_LABEL).map(o=>`<option value="${o}" ${o===(current||'')?'selected':''}>${ROLE_LABEL[o]}</option>`).join('')}
+  </select>`;
 }
-function materialsHTML(c, epoxy){
-  const mats = epoxy ? [
-    ['Surface prep — grinding / shot-blast media','Prep',0],
-    ['Epoxy primer','Primer',1],
-    ['Epoxy base coat — resin & hardener','Base coat',2],
-    ['Epoxy top coat & finish','Top coat',3],
-  ] : [
-    ['Cement, rebar & anchor bolts','Foundation',0],
-    ['Structural steel — columns & rafters','Erection',1],
-    ['Roof purlins & sheeting','Roofing',2],
-    ['Wall cladding sheets','Cladding',3],
-    ['MEP — conduits & fixtures','MEP',4],
-    ['Flooring — concrete / screed','Flooring',5],
-  ];
-  return mats.map(m=>{ const [t,cls]=matStatus(c,m[2]);
-    return `<div class="prow"><div class="pi">${icon(MAT_ICO,'currentColor',1.7)}</div><div class="pn">${m[0]}<small>${m[1]}</small></div><span class="pstat ${cls}">${t}</span></div>`;
+function emptyModuleRow(module){
+  return `<div class="prow" style="justify-content:center;color:var(--dim);padding:18px">No ${module} added yet.</div>`;
+}
+/* per-stage custom fields/documents — only shown+editable for the current stage, while "Assign" mode is open */
+function stageFieldsHTML(sid, projectId, stageObj, editOpen){
+  if(!editOpen && !(stageObj.fields||[]).length) return '';
+  const rows = (stageObj.fields||[]).map(f=>{
+    if(f.type==='file'){
+      return `<div class="prow" style="gap:8px">
+        <div class="pn">${icon(DOC_ICO,'currentColor',1.5)} ${f.label}${f.origName?` — <span style="color:var(--green)">${f.origName}</span>`:''}</div>
+        ${f.value ? `<a class="tbtn-mini" href="/api/uploads/${f.value}" target="_blank">View</a>` : ''}
+        <input type="file" id="upl-${projectId}-${stageObj.id}-${f.id}" style="max-width:150px;font-size:11px">
+        <button class="tbtn-mini" onclick="uploadStageFile('${projectId}','${stageObj.id}','${f.id}')">${f.value?'Replace':'Upload'}</button>
+      </div>`;
+    }
+    return `<div class="prow" style="gap:8px">
+      <div class="pn">${f.label}</div>
+      <input id="val-${projectId}-${stageObj.id}-${f.id}" value="${(f.value||'').replace(/"/g,'&quot;')}" placeholder="Enter ${f.label.toLowerCase()}" style="flex:1;padding:7px 9px;border:1px solid var(--border);border-radius:8px;font-size:12.5px">
+      <button class="tbtn-mini" onclick="saveFieldValue('${projectId}','${stageObj.id}','${f.id}')">Save</button>
+    </div>`;
+  }).join('');
+  const addRow = editOpen ? `<div class="prow" style="gap:8px">
+      <input id="newfld-${projectId}-${stageObj.id}" placeholder="New field/document name" style="flex:1;padding:7px 9px;border:1px solid var(--border);border-radius:8px;font-size:12.5px">
+      <select id="newfldtype-${projectId}-${stageObj.id}" style="padding:7px 9px;border:1px solid var(--border);border-radius:8px;font-size:12px"><option value="text">Text field</option><option value="file">Document</option></select>
+      <button class="tbtn-mini" onclick="addStageField('${projectId}','${stageObj.id}')">+ Add</button>
+    </div>` : '';
+  return `<div class="panel" style="margin-top:8px">${rows || (editOpen?'':'')}${addRow}</div>`;
+}
+function materialsHTML(c){
+  const items = c.materials||[];
+  if(!items.length) return emptyModuleRow('materials');
+  return items.map(m=>{
+    const meta = []; if(m.qty) meta.push(`${m.qty}${m.unit?' '+m.unit:''}`); if(m.note) meta.push(m.note);
+    return `<div class="prow"><div class="pi">${icon(MAT_ICO,'currentColor',1.7)}</div><div class="pn">${m.name}${meta.length?`<div style="color:var(--dim);font-weight:400;font-size:11.5px;margin-top:2px">${meta.join(' · ')}</div>`:''}</div><span class="pstat ${m.status==='Done'?'ps-green':'ps-grey'}">${m.status==='Done'?'Received':'Pending'}</span></div>`;
   }).join('');
 }
 function paymentsHTML(c){
-  const total=parseLakhs(c.val);
-  const rows=[
-    ['Mobilization advance',0.10, c.stage>=3?['Paid','ps-green']:['Due','ps-amber']],
-    ['Foundation milestone',0.25, (c.stage>6||(c.stage===6&&c.sub>=1))?['Paid','ps-green']:['Upcoming','ps-grey']],
-    ['Structure milestone',0.40, (c.stage>6||(c.stage===6&&c.sub>=4))?(c.stage>=9?['Paid','ps-green']:['Due','ps-amber']):['Upcoming','ps-grey']],
-    ['Completion — final',0.25, c.stage>=10?['Paid','ps-green']:(c.stage>=9?['Due','ps-amber']:['Upcoming','ps-grey'])],
-  ];
-  return rows.map(r=>{ const [t,cls]=r[2];
-    return `<div class="prow"><div class="pn">${r[0]}<small>${Math.round(r[1]*100)}% of contract</small></div><span class="pamt">${fmtL(total*r[1])}</span><span class="pstat ${cls}">${t}</span></div>`;
-  }).join('');
-}
-function docGroups(c){
-  return [
-    ['Design & Approvals', [
-      ['Initial meeting brief & requirements', 1],
-      ['Site survey report & photos', 1],
-      ['Proposal & concept design options', 2],
-      ['Developing design — floor plans & renderings', 2],
-      ['Detailed design & cost breakdown (BOQ)', 2],
-      ['Structural GA & fabrication drawings', 4],
-    ]],
-    ['Procurement & Execution', [
-      ['Work Order '+c.id, 3],
-      ['Purchase orders & material receipts', 5],
-      ['Material test certificates', 6],
-    ]],
-    ['Quality & Handover', [
-      ['QC inspection reports & sign-offs', 7],
-      ['Client progress reports', 8],
-      ['Completion certificate', 10],
-      ['Warranty & as-built dossier', 10],
-    ]],
-  ];
-}
-function docCounts(c){
-  let a=0,t=0; docGroups(c).forEach(g=>g[1].forEach(d=>{ t++; if(c.stage>=d[1]) a++; }));
-  return {a,t};
+  const items = c.payments||[];
+  if(!items.length) return emptyModuleRow('payment milestones');
+  return items.map(m=>`<div class="prow"><div class="pn">${m.name}</div><span class="pamt">${m.amount||'—'}</span><span class="pstat ${m.status==='Done'?'ps-green':'ps-amber'}">${m.status==='Done'?'Paid':'Due'}</span></div>`).join('');
 }
 function docCenterHTML(c){
-  return docGroups(c).map(g=>`
-    <div class="doc-group-lab">${g[0]}</div>
-    <div class="panel">${g[1].map(d=>{ const ok=c.stage>=d[1];
-      return `<div class="prow ${ok?'':'pending'}"><div class="pi">${icon(DOC_ICO,'currentColor',1.7)}</div><div class="pn">${d[0]}</div>${ok?'<span class="doc-view">View</span>':''}<span class="pstat ${ok?'ps-green':'ps-grey'}">${ok?'Available':'Pending'}</span></div>`;
-    }).join('')}</div>`).join('');
+  const items = c.documents||[];
+  if(!items.length) return `<div class="panel">${emptyModuleRow('documents')}</div>`;
+  return `<div class="panel">${items.map(m=>{
+    const meta = []; if(m.docType) meta.push(m.docType); if(m.note) meta.push(m.note);
+    return `<div class="prow ${m.status==='Done'?'':'pending'}"><div class="pi">${icon(DOC_ICO,'currentColor',1.7)}</div><div class="pn">${m.name}${meta.length?`<div style="color:var(--dim);font-weight:400;font-size:11.5px;margin-top:2px">${meta.join(' · ')}</div>`:''}</div><span class="pstat ${m.status==='Done'?'ps-green':'ps-grey'}">${m.status==='Done'?'Available':'Pending'}</span></div>`;
+  }).join('')}</div>`;
+}
+const PO_STATUS_COLOR = {Draft:'ps-grey', Sent:'ps-amber', Acknowledged:'ps-amber', Received:'ps-green'};
+function poIn(id,ph,extra=''){ return `<input id="${id}" placeholder="${ph}" style="padding:8px 10px;border:1px solid var(--border);border-radius:8px;font-family:var(--sans);font-size:12.5px;${extra}">`; }
+function poItemRowHTML(projectId, i){
+  return `<div class="po-item-row" data-i="${i}" style="display:flex;gap:6px;margin-bottom:6px">
+    ${poIn(`po-it-name-${projectId}-${i}`,'Item name','flex:1.4')}
+    ${poIn(`po-it-desc-${projectId}-${i}`,'Description','flex:1.6')}
+    ${poIn(`po-it-qty-${projectId}-${i}`,'Qty','width:60px')}
+    ${poIn(`po-it-price-${projectId}-${i}`,'Unit price','width:90px')}
+    <button class="tbtn-mini" onclick="removePoItemRow(this,'${projectId}',${i})" title="Remove">✕</button>
+  </div>`;
+}
+function removePoItemRow(btn, projectId, i){
+  btn.closest('.po-item-row').remove();
+  clearDrafts([`po-it-name-${projectId}-${i}`,`po-it-desc-${projectId}-${i}`,`po-it-qty-${projectId}-${i}`,`po-it-price-${projectId}-${i}`]);
+  savePoDraftRowIds(projectId, poDraftRowIds(projectId).filter(x=>x!==i));
+}
+let poItemCounter = 0;
+function addPoItemRow(projectId){
+  const id = ++poItemCounter;
+  const wrap = document.getElementById(`po-items-wrap-${projectId}`);
+  wrap.insertAdjacentHTML('beforeend', poItemRowHTML(projectId, id));
+  const rowIds = poDraftRowIds(projectId); rowIds.push(id); savePoDraftRowIds(projectId, rowIds);
+  bindDrafts(wrap);
+}
+function poHTML(sid, projectId, c){
+  const items = c.po||[];
+  const rows = items.length ? items.map(po=>{
+    const t = po.items.reduce((s,it)=>s+(it.qty*it.unitPrice),0)*(1+(po.taxPercent||0)/100)+(po.shippingFee||0);
+    return `<div class="prow">
+      <div class="pn"><b>${po.id}</b> — ${po.vendor.name}<div style="color:var(--dim);font-weight:400;margin-top:2px">${po.items.map(it=>it.name).join(', ')}${po.emailedTo?` · <span style="color:var(--green)">emailed to ${po.emailedTo}</span>`:''}</div></div>
+      <span class="pamt">₹${t.toLocaleString('en-IN',{maximumFractionDigits:0})}</span>
+      <span class="pstat ${PO_STATUS_COLOR[po.status]}">${po.status}</span>
+      <a class="tbtn-mini" href="/api/projects/${projectId}/po/${po.id}/pdf">Download PDF</a>
+      ${po.status!=='Received' ? `<button class="tbtn-mini" onclick="advancePO('${sid}','${projectId}','${po.id}')">Advance</button>` : ''}
+    </div>`;
+  }).join('') : emptyModuleRow('purchase orders');
+  let savedRows = poDraftRowIds(projectId);
+  if(!savedRows.length){ savedRows = [1]; savePoDraftRowIds(projectId, savedRows); }
+  poItemCounter = Math.max(...savedRows);
+  return `<div class="panel">${rows}</div>
+    <div class="panel" style="padding:16px">
+      <div style="display:flex;gap:8px;margin-bottom:8px">
+        ${poIn(`po-vendor-name-${projectId}`,'Vendor name','flex:1')}
+        ${poIn(`po-vendor-phone-${projectId}`,'Vendor phone','flex:1')}
+        ${poIn(`po-vendor-email-${projectId}`,'Vendor email','flex:1')}
+      </div>
+      <div style="margin-bottom:8px">${poIn(`po-vendor-address-${projectId}`,'Vendor address','width:100%')}</div>
+      <div style="display:flex;gap:8px;margin-bottom:8px">
+        ${poIn(`po-shipvia-${projectId}`,'Ship via','flex:1')}
+        ${poIn(`po-fob-${projectId}`,'FOB','flex:1')}
+        ${poIn(`po-shipterms-${projectId}`,'Shipping terms','flex:1')}
+      </div>
+      <div style="font-size:11px;color:var(--dim);font-weight:700;text-transform:uppercase;letter-spacing:.05em;margin:10px 0 6px">Items</div>
+      <div id="po-items-wrap-${projectId}">${savedRows.map(i=>poItemRowHTML(projectId,i)).join('')}</div>
+      <button class="tbtn-mini" style="margin-bottom:10px" onclick="addPoItemRow('${projectId}')">+ Add item</button>
+      <div style="display:flex;gap:8px;align-items:center">
+        ${poIn(`po-tax-${projectId}`,'Tax %','width:80px')}
+        ${poIn(`po-shipfee-${projectId}`,'Shipping fee','width:110px')}
+        <button class="tbtn-mini active" onclick="raisePO('${sid}','${projectId}')">Raise PO</button>
+      </div>
+    </div>`;
 }
 
 /* ---- MD company overview (home roll-up) ---- */
-function milestones(c){
-  const t=parseLakhs(c.val);
-  return [
-    {label:'Mobilization advance', amt:t*0.10, state: c.stage>=3?'paid':'due'},
-    {label:'Foundation milestone', amt:t*0.25, state:(c.stage>6||(c.stage===6&&c.sub>=1))?'paid':'upcoming'},
-    {label:'Structure milestone',  amt:t*0.40, state:(c.stage>6||(c.stage===6&&c.sub>=4))?(c.stage>=9?'paid':'due'):'upcoming'},
-    {label:'Completion — final',   amt:t*0.25, state: c.stage>=10?'paid':(c.stage>=9?'due':'upcoming')},
-  ];
-}
-function allProjects(){
-  const out=[];
-  WHDATA.projects.forEach((p,i)=>out.push(Object.assign({service:'warehouse',_idx:i}, p)));
-  SERVICES.forEach(s=>{ if(s.id==='warehouse') return; (CLIENTS[s.id]||[]).forEach((c,i)=>out.push(Object.assign({service:s.id,_idx:i}, c))); });
-  return out;
-}
+function allProjects(){ return WHDATA.projects; }
 function renderOverview(){
   const el=document.getElementById('mdOverview'); if(!el) return;
   const ps=allProjects();
-  let orderBook=0, billed=0, outstanding=0, onTrack=0, atRisk=0;
-  const recv=[];
-  ps.forEach(p=>{
-    orderBook += parseLakhs(p.val);
-    if(p.status==='ok') onTrack++; else atRisk++;
-    milestones(p).forEach(m=>{
-      if(m.state==='paid') billed += m.amt;
-      else if(m.state==='due'){ outstanding += m.amt; recv.push({p, label:m.label, amt:m.amt}); }
-    });
-  });
   const att = ps.filter(p=>p.status!=='ok')
     .map(p=>({p, sev:p.status, text:p.note || (p.status==='late'?'Delayed — delivery date at risk':'Needs attention')}))
     .sort((a,b)=>(a.sev==='late'?0:1)-(b.sev==='late'?0:1));
-  recv.sort((a,b)=>b.amt-a.amt);
 
   el.innerHTML = `
    <div style="margin-bottom:30px">
      <div class="ov-card">
        <div class="oh"><h3><span class="ad" style="background:#dc2626"></span>Needs your attention</h3><span class="cnt">${att.length} flag${att.length!==1?'s':''}</span></div>
-       ${att.length ? att.slice(0,8).map(a=>`<div class="att" onclick="goProject('${a.p.service}',${a.p._idx})"><span class="ad" style="background:${a.sev==='late'?'#dc2626':'var(--amber)'}"></span><div class="am"><b>${a.p.name}</b><p>${a.text}</p><div class="asvc">${svcById(a.p.service).name}</div></div></div>`).join('')
+       ${att.length ? att.slice(0,8).map(a=>`<div class="att" onclick="goProject('${a.p.service}','${a.p.id}')"><span class="ad" style="background:${a.sev==='late'?'#dc2626':'var(--amber)'}"></span><div class="am"><b>${a.p.name}</b><p>${a.text}</p><div class="asvc">${svcById(a.p.service).name}</div></div></div>`).join('')
          : `<div class="up-empty" style="padding:16px 18px">Nothing on fire — every project is on track.</div>`}
      </div>
    </div>`;
 }
 let homePoll=null;
-function startHomePoll(){ stopHomePoll(); homePoll=setInterval(async()=>{ await loadWH(); renderOverview(); }, 5000); }
+function startHomePoll(){ stopHomePoll(); homePoll=setInterval(async()=>{
+  await loadWH(); renderOverview(); renderHomePoSelect();
+  const typingPO = document.activeElement && /^po-/.test(document.activeElement.id||'');
+  if(!typingPO) renderHomePO();
+}, 5000); }
 function stopHomePoll(){ if(homePoll){ clearInterval(homePoll); homePoll=null; } }
+
+/* ---- home-page quick Purchase Order widget — raise/view a PO for any client without opening its full page ---- */
+let homePoProjectId = null;
+function renderHomePoSelect(){
+  const sel = document.getElementById('homePoSelect'); if(!sel) return;
+  const ps = allProjects();
+  const prevVal = sel.value;
+  sel.innerHTML = `<option value="">Choose a client…</option>` + ps.map(p=>
+    `<option value="${p.id}">${p.name} — ${svcById(p.service).name}</option>`
+  ).join('');
+  if(ps.some(p=>p.id===prevVal)) sel.value = prevVal;
+  else if(homePoProjectId && ps.some(p=>p.id===homePoProjectId)) sel.value = homePoProjectId;
+  else homePoProjectId = null;
+}
+function selectHomePoProject(id){ homePoProjectId = id || null; renderHomePO(); }
+function renderHomePO(){
+  const el = document.getElementById('homePoBody'); if(!el) return;
+  const p = homePoProjectId ? WHDATA.projects.find(x=>x.id===homePoProjectId) : null;
+  if(!p){ el.innerHTML = `<div style="color:var(--dim);font-size:12.5px;padding:6px 2px">Pick a client above to raise or view its purchase orders.</div>`; return; }
+  el.innerHTML = poHTML('home', p.id, p);
+  bindDrafts(el);
+}
 /* open a specific project from the overview */
-async function goProject(sid, i){
+async function goProject(sid, projectId){
   stopHomePoll();
-  if(sid==='warehouse'){ await loadWH(); whView='client'; whClientIdx=i; startWHPoll(); }
-  else { whView=null; }
-  renderClient(sid, i);
+  currentServiceId = sid;
+  await loadWH();
+  whView='client'; whClientId=projectId; startWHPoll();
+  assignOpen = false;
+  renderClient(sid, projectId);
   document.getElementById('view-dash').classList.remove('on');
   document.getElementById('view-service').classList.add('on');
   window.scrollTo({top:0});
 }
 
 /* click a client → track that project through the process */
-function openClient(sid, i){
-  if(sid==='warehouse'){ whView='client'; whClientIdx=i; }
-  else { stopWHPoll(); whView=null; }
-  renderClient(sid, i);
+let assignOpen = false;
+function openClient(sid, projectId){
+  currentServiceId = sid;
+  whView='client'; whClientId=projectId;
+  assignOpen = false;
+  renderClient(sid, projectId);
   window.scrollTo({top:0});
 }
-function renderClient(sid, i){
+function toggleAssignMode(sid, projectId){ assignOpen = !assignOpen; renderClient(sid, projectId); }
+function renderClient(sid, projectId){
   const s = svcById(sid);
-  const c = (sid==='warehouse' ? WHDATA.projects[i] : CLIENTS[sid][i]);
+  const c = WHDATA.projects.find(p=>p.id===projectId);
   if(!c) return;
   const h = HEALTH[c.status];
-  const dc = docCounts(c);
+  const ma = c.moduleAssignees || {};
   const subs = s.sub==='epoxy' ? EPOXY_SUB : STEEL_SUB;
-  const steps = STAGES.map((name,idx)=>{
+  const steps = (c.stages||[]).map((stageObj,idx)=>{
     const n = idx+1;
     const cls = n<c.stage ? 'done' : (n===c.stage ? 'current' : 'todo');
     const node = cls==='done' ? icon('<path d="M20 6 9 17l-5-5"/>','#fff',3)
                : cls==='current' ? '<span class="pulse"></span>' : '';
     let subHtml = '';
-    if(n===6 && c.stage>=6){
+    if(stageObj.kind==='site-execution' && c.stage>=n){
       subHtml = `<div class="substeps">${subs.map((ss,si)=>{
-        let sc=''; if(c.stage>6) sc='d'; else if(c.stage===6){ if(si<c.sub) sc='d'; else if(si===c.sub) sc='a'; }
+        let sc=''; if(c.stage>n) sc='d'; else if(c.stage===n){ if(si<c.sub) sc='d'; else if(si===c.sub) sc='a'; }
         return `<span class="substep ${sc}">${si+1}. ${ss}</span>`;
       }).join('')}</div>`;
     }
+    const assignHtml = assignOpen ? `<div class="stage-assign"><span>Assigned to</span><select class="assign-select sm" onchange="assignPerson('${sid}','${projectId}','${stageObj.id}',this.value)">${PEOPLE.map(pp=>`<option value="${pp}" ${pp===personFor(c,stageObj.id)?'selected':''}>${pp}</option>`).join('')}</select></div>` : '';
+    const renameHtml = assignOpen ? `<button class="tbtn-mini" style="margin-left:8px" onclick="renameStage('${projectId}','${stageObj.id}','${stageObj.name.replace(/'/g,"\\'")}')">Rename</button>` : '';
+    const fieldsHtml = stageFieldsHTML(sid, projectId, stageObj, assignOpen);
     return `<div class="tstep ${cls}">
       <div class="tnode">${node}</div>
-      <div class="tbody"><b>${n}. ${name}</b>${n===c.stage?'<span class="nowtag">Current</span>':''}<div class="tdoc">${STAGE_DOC[idx]}</div>${subHtml}</div>
+      <div class="tbody"><b>${n}. ${stageObj.name}</b>${renameHtml}${n===c.stage?'<span class="nowtag">Current</span>':''}<div class="tdoc">${stageObj.desc||''}</div>${assignHtml}${subHtml}${fieldsHtml}</div>
     </div>`;
   }).join('');
+  const curStageId = (c.stages[c.stage-1]||{}).id||'';
+  const addStepControls = assignOpen ? `<div style="display:flex;gap:8px;margin-bottom:10px">
+      <button class="tbtn-mini" onclick="addStage('${projectId}','${curStageId}')">+ Insert step after current</button>
+      <button class="tbtn-mini" onclick="addStage('${projectId}','end')">+ Add step at the end</button>
+    </div>` : '';
   document.getElementById('serviceBody').innerHTML = `
     <div class="crumb" onclick="openService('${sid}')">${icon(back,'currentColor',2)} Back to ${s.name} clients</div>
     <div class="client-hero">
@@ -598,32 +758,225 @@ function renderClient(sid, i){
       <div class="ch-facts">
         <div class="mono"><span>Job ID</span><b>${c.id}</b></div>
         <div class="mono"><span>Contract value</span><b>${c.val}</b></div>
-        <div><span>Assigned team</span><b>${c.team}</b></div>
+        <div><span>Assigned team</span>
+          <select class="assign-select" onchange="assignTeam('${sid}','${projectId}',this.value)">
+            ${TEAMS.map(t=>`<option value="${t}" ${t===c.team?'selected':''}>${t}</option>`).join('')}
+          </select>
+        </div>
         <div><span>Start</span><b>${c.start}</b></div>
         <div><span>Delivery</span><b>${c.delivery}</b></div>
         <div class="mono"><span>Progress</span><b>${c.pct}%</b></div>
       </div>
       ${c.note?`<div class="ch-note">${icon(warnI,'currentColor',2)} ${c.note}</div>`:''}
     </div>
-    <div class="track-head"><h3>Project progress</h3><span>Stage ${c.stage} of 10 · ${c.pct}% complete</span></div>
+    <div class="track-head"><h3>Project progress</h3><div style="display:flex;align-items:center;gap:12px">${moduleAssignHTML(sid,projectId,'progress',ma.progress)}<button class="tbtn-mini ${assignOpen?'active':''}" onclick="toggleAssignMode('${sid}','${projectId}')">${assignOpen?'Done assigning':'Assign'}</button></div></div>
+    ${addStepControls}
     <div class="tracker">${steps}</div>
 
-    <div class="track-head"><h3>Materials &amp; procurement</h3><span>raw material sourcing → site</span></div>
-    <div class="panel">${materialsHTML(c, s.sub==='epoxy')}</div>
+    <div class="track-head"><h3>Materials &amp; procurement</h3>${moduleAssignHTML(sid,projectId,'materials',ma.materials)}</div>
+    <div class="panel">${materialsHTML(c)}</div>
 
-    <div class="track-head"><h3>Payment milestones</h3><span>${c.val} contract</span></div>
+    <div class="track-head"><h3>Payment milestones</h3>${moduleAssignHTML(sid,projectId,'payments',ma.payments)}</div>
     <div class="panel">${paymentsHTML(c)}</div>
 
-    <div class="track-head"><h3>Document Center</h3><span>${dc.a} of ${dc.t} documents available · bundled to ${c.id}</span></div>
-    ${docCenterHTML(c)}`;
+    <div class="track-head"><h3>Document Center</h3>${moduleAssignHTML(sid,projectId,'documents',ma.documents)}</div>
+    ${docCenterHTML(c)}
+
+    <div class="track-head"><h3>Purchase Orders</h3><span>Supervisor &amp; Managing Director only</span></div>
+    ${poHTML(sid,projectId,c)}`;
+  bindDrafts(document.getElementById('serviceBody'));
 }
 
-function logout(){ fetch('/api/logout',{method:'POST'}).finally(()=>{location.href='/login';}); }
+/* toast */
+let toastTimer;
+function toast(title, sub){
+  let t=document.getElementById('toast');
+  if(!t){t=document.createElement('div');t.id='toast';t.className='toast';document.body.appendChild(t);}
+  t.innerHTML=`<div class="ti">${icon('<path d="M20 6 9 17l-5-5"/>','var(--green)',2.6)}</div><div><b>${title}</b><small>${sub}</small></div>`;
+  requestAnimationFrame(()=>t.classList.add('on'));
+  clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove('on'),3200);
+}
+
+/* MD assigns a team to a project — persists for Warehouse (live), local-only for sample services */
+async function assignTeam(sid, projectId, team){
+  const p = WHDATA.projects.find(x=>x.id===projectId);
+  try{
+    const r = await apiFetch('/api/projects/'+projectId+'/assign', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({team})});
+    const j = await r.json();
+    if(!r.ok){ toast('Not allowed', j.error||'Could not assign team'); renderClient(sid,projectId); return; }
+    if(p) p.team = team;
+    WHDATA.updates = j.updates || WHDATA.updates;
+    toast('Team assigned', `${team} now assigned to ${p ? p.name : projectId}`);
+  }catch{ toast('Network error','Could not reach server'); }
+  renderClient(sid, projectId);
+}
+
+/* MD assigns a specific person to one task/stage — persists across every service */
+async function assignPerson(sid, projectId, stageId, person){
+  const p = WHDATA.projects.find(x=>x.id===projectId);
+  const stageObj = p && (p.stages||[]).find(x=>x.id===stageId);
+  try{
+    const r = await apiFetch('/api/projects/'+projectId+'/assign-stage', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({stageId,person})});
+    const j = await r.json();
+    if(!r.ok){ toast('Not allowed', j.error||'Could not assign'); renderClient(sid,projectId); return; }
+    if(p) p.assignees = (j.project && j.project.assignees) || p.assignees || {};
+    WHDATA.updates = j.updates || WHDATA.updates;
+    toast('Person assigned', `${person} assigned to ${stageObj?stageObj.name:'this stage'}`);
+  }catch{ toast('Network error','Could not reach server'); }
+  renderClient(sid, projectId);
+}
+
+/* MD (or Supervisor) edits the process itself — insert/rename steps, define custom fields/documents */
+async function addStage(projectId, afterStageId){
+  const name = prompt('Name for the new process step:');
+  if(!name || !name.trim()) return;
+  const p = WHDATA.projects.find(x=>x.id===projectId); const sid = p ? p.service : currentServiceId;
+  try{
+    const r = await apiFetch('/api/projects/'+projectId+'/stage/add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name.trim(), afterStageId})});
+    const j = await r.json();
+    if(!r.ok){ toast('Not allowed', j.error||'Could not add step'); return; }
+    toast('Step added', `"${name.trim()}" added to the process`);
+    await loadWH();
+  }catch{ toast('Network error','Could not reach server'); }
+  renderClient(sid, projectId);
+}
+async function renameStage(projectId, stageId, currentName){
+  const name = prompt('Rename this step:', currentName);
+  if(name===null || !name.trim() || name.trim()===currentName) return;
+  const p = WHDATA.projects.find(x=>x.id===projectId); const sid = p ? p.service : currentServiceId;
+  try{
+    const r = await apiFetch('/api/projects/'+projectId+'/stage/rename',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({stageId, name:name.trim()})});
+    const j = await r.json();
+    if(!r.ok){ toast('Not allowed', j.error||'Could not rename'); return; }
+    toast('Renamed', `Now called "${name.trim()}"`);
+    await loadWH();
+  }catch{ toast('Network error','Could not reach server'); }
+  renderClient(sid, projectId);
+}
+async function addStageField(projectId, stageId){
+  const labelEl = document.getElementById(`newfld-${projectId}-${stageId}`);
+  const typeEl = document.getElementById(`newfldtype-${projectId}-${stageId}`);
+  const label = (labelEl.value||'').trim();
+  if(!label) return;
+  const p = WHDATA.projects.find(x=>x.id===projectId); const sid = p ? p.service : currentServiceId;
+  try{
+    const r = await apiFetch('/api/projects/'+projectId+'/stage/field/add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({stageId, label, type:typeEl.value})});
+    const j = await r.json();
+    if(!r.ok){ toast('Not allowed', j.error||'Could not add field'); return; }
+    toast('Added', `"${label}" added to this step`);
+    clearDrafts([`newfld-${projectId}-${stageId}`]);
+    await loadWH();
+  }catch{ toast('Network error','Could not reach server'); }
+  renderClient(sid, projectId);
+}
+async function saveFieldValue(projectId, stageId, fieldId){
+  const el = document.getElementById(`val-${projectId}-${stageId}-${fieldId}`);
+  const value = el.value;
+  const p = WHDATA.projects.find(x=>x.id===projectId); const sid = p ? p.service : currentServiceId;
+  try{
+    const r = await apiFetch('/api/projects/'+projectId+'/stage/field/value',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({stageId, fieldId, value})});
+    const j = await r.json();
+    if(!r.ok){ toast('Not allowed', j.error||'Could not save'); return; }
+    toast('Saved', 'Field updated');
+    clearDrafts([`val-${projectId}-${stageId}-${fieldId}`]);
+    await loadWH();
+  }catch{ toast('Network error','Could not reach server'); }
+  renderClient(sid, projectId);
+}
+async function uploadStageFile(projectId, stageId, fieldId){
+  const el = document.getElementById(`upl-${projectId}-${stageId}-${fieldId}`);
+  const file = el.files && el.files[0];
+  if(!file){ toast('No file chosen','Pick a file first'); return; }
+  const p = WHDATA.projects.find(x=>x.id===projectId); const sid = p ? p.service : currentServiceId;
+  const fd = new FormData();
+  fd.append('stageId', stageId); fd.append('fieldId', fieldId); fd.append('file', file);
+  try{
+    const r = await apiFetch('/api/projects/'+projectId+'/stage/field/upload',{method:'POST', body:fd});
+    const j = await r.json();
+    if(!r.ok){ toast('Not allowed', j.error||'Could not upload'); return; }
+    toast('Uploaded', `${file.name} saved`);
+    await loadWH();
+  }catch{ toast('Network error','Could not reach server'); }
+  renderClient(sid, projectId);
+}
+
+/* MD assigns a whole work area (Project Progress / Materials / Payments / Documents) to a role */
+async function assignModule(sid, projectId, module, role){
+  try{
+    const r = await apiFetch('/api/projects/'+projectId+'/assign-module', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({module,role})});
+    const j = await r.json();
+    if(!r.ok){ toast('Not allowed', j.error||'Could not assign'); renderClient(sid,projectId); return; }
+    const p = WHDATA.projects.find(x=>x.id===projectId);
+    if(p) p.moduleAssignees = (j.project && j.project.moduleAssignees) || p.moduleAssignees || {};
+    WHDATA.updates = j.updates || WHDATA.updates;
+    toast(role?'Work area assigned':'Work area unassigned', role?`${MODULE_LABEL[module]} assigned to ${ROLE_LABEL[role]}`:`${MODULE_LABEL[module]} is now unassigned`);
+  }catch{ toast('Network error','Could not reach server'); }
+  renderClient(sid, projectId);
+}
+
+/* MD (or Supervisor) raises a purchase order against a vendor — collects vendor/ship/item fields */
+function collectPoItems(projectId){
+  return Array.from(document.querySelectorAll(`#po-items-wrap-${projectId} .po-item-row`)).map(row=>{
+    const i = row.dataset.i;
+    return {
+      name: (document.getElementById(`po-it-name-${projectId}-${i}`)?.value||'').trim(),
+      desc: (document.getElementById(`po-it-desc-${projectId}-${i}`)?.value||'').trim(),
+      qty: document.getElementById(`po-it-qty-${projectId}-${i}`)?.value||0,
+      unitPrice: document.getElementById(`po-it-price-${projectId}-${i}`)?.value||0
+    };
+  }).filter(it=>it.name);
+}
+async function raisePO(sid, projectId){
+  const g = id => (document.getElementById(id)?.value||'').trim();
+  const vendorName = g(`po-vendor-name-${projectId}`);
+  const items = collectPoItems(projectId);
+  if(!vendorName || !items.length){ toast('Missing details','Vendor name and at least one item are required'); return; }
+  const body = {
+    vendor: { name:vendorName, phone:g(`po-vendor-phone-${projectId}`), email:g(`po-vendor-email-${projectId}`), address:g(`po-vendor-address-${projectId}`) },
+    shipVia: g(`po-shipvia-${projectId}`), fob: g(`po-fob-${projectId}`), shippingTerms: g(`po-shipterms-${projectId}`),
+    taxPercent: g(`po-tax-${projectId}`), shippingFee: g(`po-shipfee-${projectId}`),
+    items
+  };
+  try{
+    const r = await apiFetch('/api/projects/'+projectId+'/po/create', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body)});
+    const j = await r.json();
+    if(!r.ok){ toast('Not allowed', j.error||'Could not raise PO'); return; }
+    WHDATA.updates = j.updates || WHDATA.updates;
+    const poId = j.project.po[j.project.po.length-1].id;
+    if(j.email && j.email.sent) toast('PO raised & emailed', `${poId} sent to ${vendorName}'s inbox`);
+    else toast('PO raised', `${poId} created — email not sent (${(j.email&&j.email.reason)||'no vendor email'})`);
+    clearPoDraft(projectId);
+  }catch{ toast('Network error','Could not reach server'); }
+  await loadWH();
+  if(sid==='home') renderHomePO(); else renderClient(sid, projectId);
+}
+function clearPoDraft(projectId){
+  const rowIds = poDraftRowIds(projectId);
+  const fieldIds = [`po-vendor-name-${projectId}`,`po-vendor-phone-${projectId}`,`po-vendor-email-${projectId}`,`po-vendor-address-${projectId}`,`po-shipvia-${projectId}`,`po-fob-${projectId}`,`po-shipterms-${projectId}`,`po-tax-${projectId}`,`po-shipfee-${projectId}`];
+  rowIds.forEach(i=>fieldIds.push(`po-it-name-${projectId}-${i}`,`po-it-desc-${projectId}-${i}`,`po-it-qty-${projectId}-${i}`,`po-it-price-${projectId}-${i}`));
+  clearDrafts(fieldIds);
+  localStorage.removeItem(DRAFT_PREFIX+'po-rows-'+projectId);
+}
+async function advancePO(sid, projectId, poId){
+  try{
+    const r = await apiFetch('/api/projects/'+projectId+'/po/status', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({poId})});
+    const j = await r.json();
+    if(!r.ok){ toast('Not allowed', j.error||'Could not update PO'); return; }
+    WHDATA.updates = j.updates || WHDATA.updates;
+  }catch{ toast('Network error','Could not reach server'); }
+  await loadWH();
+  if(sid==='home') renderHomePO(); else renderClient(sid, projectId);
+}
+
+function logout(){ apiFetch('/api/logout',{method:'POST'}).finally(()=>{location.href='/login';}); }
 
 async function init(){
+  try{ const me = await fetch('/api/me'); if(me.ok){ CSRF = (await me.json()).csrf || ''; } }catch{}
   renderGrid();
   await loadWH();
   renderOverview();
+  renderHomePoSelect();
+  renderHomePO();
   startHomePoll();
 }
 init();

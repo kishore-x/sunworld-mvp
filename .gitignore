@@ -1,4 +1,8 @@
 node_modules/
 db.json
+db.json.tmp
+db.json.bak*
+uploads/
+logs/
 .DS_Store
 *.log
