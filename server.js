@@ -1,100 +1,145 @@
-// Sunworld Command Center — MVP server (zero dependencies, Node core only)
-// Roles: MD (oversees everything) + Coordinator (runs Stages 1-5,7-10 for every service)
-// + Site Manager / Supervisor (named individuals — only see work the MD assigned to them at Site Execution).
-// Every team update flows into shared project state, which the MD dashboard reads live — across all 5 services.
-const http = require('http');
+// Sunworld Command Center — Production-Ready Server
+require('dotenv').config();
+const express = require('express');
+const helmet = require('helmet');
+const cors = require('cors');
+const rateLimit = require('express-rate-limit');
+const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
+const db = require('./src/db');
+
 const ROOT = __dirname;
 const PUB = path.join(ROOT, 'public');
-const DB = path.join(ROOT, 'db.json');
 const UPLOADS = path.join(ROOT, 'uploads');
 const LOGS = path.join(ROOT, 'logs');
 const PORT = process.env.PORT || 4173;
-const MAX_BODY_BYTES = 2 * 1024 * 1024;      // JSON request bodies
-const MAX_UPLOAD_BYTES = 15 * 1024 * 1024;   // multipart file uploads
-const ALLOWED_UPLOAD_EXT = ['.pdf','.jpg','.jpeg','.png','.doc','.docx','.xls','.xlsx','.txt','.webp'];
 
-// ---- Crash-proofing: log real errors to a file so an overnight failure leaves a trace, and never
-// let one bad request or a stray unhandled error take the whole process down.
-function logError(context, err){
-  try{
-    fs.mkdirSync(LOGS, {recursive:true});
+// Create uploads & logs directories
+fs.mkdirSync(UPLOADS, { recursive: true });
+fs.mkdirSync(LOGS, { recursive: true });
+
+const app = express();
+
+// ---- Crash-proofing Logging ----
+function logError(context, err) {
+  try {
     const line = `[${new Date().toISOString()}] ${context}: ${err && err.stack || err}\n`;
-    fs.appendFileSync(path.join(LOGS,'error.log'), line);
-  }catch{ /* logging must never itself throw */ }
+    fs.appendFileSync(path.join(LOGS, 'error.log'), line);
+  } catch (e) {
+    // Logging must never crash the server
+  }
   console.error(`[${context}]`, err);
 }
+
 process.on('uncaughtException', err => logError('uncaughtException', err));
 process.on('unhandledRejection', err => logError('unhandledRejection', err));
 
-// ---- Outbound email (Resend) — set RESEND_API_KEY before the vendor-email feature will actually send.
-// Resend's API is a single JSON POST, so this uses Node's built-in fetch — no npm install needed.
-const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
-const RESEND_FROM = process.env.RESEND_FROM || 'onboarding@resend.dev';
-async function sendPoEmail(proj, po){
-  if(!RESEND_API_KEY) return { sent:false, reason:'RESEND_API_KEY not configured' };
-  if(!po.vendor.email) return { sent:false, reason:'Vendor has no email address' };
-  try{
-    const pdf = poPdfBuffer(proj, po);
-    const html = `<p>Dear ${esc(po.vendor.name)},</p>
-      <p>Please find attached Purchase Order <b>${esc(po.id)}</b> from ${esc(COMPANY.name)} for project <b>${esc(proj.name)}</b>.</p>
-      <p>Ship Via: ${esc(po.shipVia||'-')}<br>FOB: ${esc(po.fob||'-')}<br>Shipping Terms: ${esc(po.shippingTerms||'-')}</p>
-      <p>Regards,<br>${esc(COMPANY.name)}</p>`;
-    const r = await fetch('https://api.resend.com/emails', {
-      method:'POST',
-      headers:{ 'Authorization':`Bearer ${RESEND_API_KEY}`, 'Content-Type':'application/json' },
-      body: JSON.stringify({
-        from: RESEND_FROM,
-        to: po.vendor.email,
-        subject: `Purchase Order ${po.id} — ${COMPANY.name}`,
-        html,
-        attachments: [{ filename: `${po.id}.pdf`, content: pdf.toString('base64') }]
-      })
-    });
-    if(!r.ok){ const t = await r.text(); return { sent:false, reason:`Resend error: ${t.slice(0,200)}` }; }
-    return { sent:true };
-  }catch(e){ return { sent:false, reason:e.message }; }
-}
+// ---- Global Middleware ----
+// Helmet security headers (configured loosely on CSP to allow loading external CDNs in HTML pages)
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false
+}));
 
-// ---- Password hashing (Node's built-in crypto.scrypt — no library) ----
-// Every login is verified against a salted scrypt hash, never a plaintext comparison. The demo
-// passwords below are hashed once at boot; in a real deployment, set <ROLE>_PASSWORD env vars
-// (e.g. ADMIN_PASSWORD=...) to override any of them without touching source code — same pattern
-// Supabase/production secrets will use later.
-function hashPassword(password){
+// CORS middleware
+app.use(cors());
+
+// Parse requests
+app.use(express.json({ limit: '2mb' }));
+app.use(express.urlencoded({ extended: true, limit: '2mb' }));
+
+// Custom Cookie parser & session middleware
+app.use(async (req, res, next) => {
+  const h = req.headers.cookie || '';
+  req.cookies = Object.fromEntries(h.split(';').map(v => v.trim().split('=').map(decodeURIComponent)).filter(a => a[0]));
+  
+  const sid = req.cookies.sw_sid;
+  req.session = sid ? await db.getSession(sid) : null;
+  next();
+});
+
+// Rate limiting configurations
+const authLimiter = rateLimit.rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 mins
+  max: 20, // Limit each IP to 20 login requests per window
+  message: { error: 'Too many login attempts. Please try again in 15 minutes.' },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+const apiLimiter = rateLimit.rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 min
+  max: 300, // Limit each IP to 300 API requests per minute
+  message: { error: 'Too many requests. Please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
+// CSRF Protection middleware
+const csrfCheck = (req, res, next) => {
+  if (['GET', 'HEAD', 'OPTIONS'].includes(req.method)) return next();
+  if (['/api/login', '/api/logout', '/api/reset'].includes(req.path)) return next();
+  
+  if (!req.session) {
+    return res.status(401).json({ error: 'Session expired. Please sign in again.' });
+  }
+  const token = req.headers['x-csrf-token'];
+  if (!token || token !== req.session.csrf) {
+    return res.status(403).json({ error: 'Security validation failed (Invalid or missing CSRF token).' });
+  }
+  next();
+};
+
+app.use(csrfCheck);
+
+// Multer Storage for File Uploads
+const ALLOWED_UPLOAD_EXT = ['.pdf', '.jpg', '.jpeg', '.png', '.doc', '.docx', '.xls', '.xlsx', '.txt', '.webp'];
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, UPLOADS);
+  },
+  filename: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    const id = req.params.id || 'upload';
+    const stageId = req.body.stageId || 'stage';
+    const fieldId = req.body.fieldId || 'field';
+    const safeName = `${id}-${stageId}-${fieldId}-${Date.now()}${ext}`;
+    cb(null, safeName);
+  }
+});
+
+const upload = multer({
+  storage,
+  limits: { fileSize: 15 * 1024 * 1024 }, // 15MB file size limit
+  fileFilter: (req, file, cb) => {
+    const ext = path.extname(file.originalname).toLowerCase();
+    if (!ALLOWED_UPLOAD_EXT.includes(ext)) {
+      return cb(new Error(`File type "${ext}" is not allowed. Use PDF, Word, Excel, or an image.`), false);
+    }
+    cb(null, true);
+  }
+});
+
+// ---- Password hashing ----
+function hashPassword(password) {
   const salt = crypto.randomBytes(16).toString('hex');
   const hash = crypto.scryptSync(password, salt, 64).toString('hex');
   return `${salt}:${hash}`;
 }
-function verifyPassword(password, stored){
-  if(!stored || !password) return false;
+function verifyPassword(password, stored) {
+  if (!stored || !password) return false;
   const [salt, hash] = stored.split(':');
-  if(!salt || !hash) return false;
+  if (!salt || !hash) return false;
   const check = crypto.scryptSync(password, salt, 64);
   const expected = Buffer.from(hash, 'hex');
-  return check.length===expected.length && crypto.timingSafeEqual(check, expected);
+  return check.length === expected.length && crypto.timingSafeEqual(check, expected);
 }
 
-// ---- Users / roles (demo credentials) ----
-// canGeneral = can act on any non-gated stage, department-wide, no per-stage assignment needed.
-// canSiteExecution = can act on the 'site-execution'-kind stage, but ONLY once the MD has
-//          assigned that stage to this login's exact `person` name (checked server-side).
-// person = for named-individual logins, the exact name string the MD uses in the per-task
-//          "Assign" dropdown.
-const USERS = {
-  admin:       { passHash: hashPassword(process.env.ADMIN_PASSWORD||'admin123'),             role:'md',          name:'Managing Director', canGeneral:true, canSiteExecution:true },
-  sitemanager: { passHash: hashPassword(process.env.SITEMANAGER_PASSWORD||'sitemanager123'), role:'sitemanager', name:'Site Manager',      canGeneral:false, canSiteExecution:true, person:'Site Manager' },
-  // Supervisor now builds the whole project plan once the MD starts a new client — department-wide
-  // for every stage except Site Execution, which still requires the MD to explicitly assign
-  // "Supervisor" (or Site Manager) by name before they can act on it.
-  supervisor:  { passHash: hashPassword(process.env.SUPERVISOR_PASSWORD||'supervisor123'),   role:'supervisor',  name:'Supervisor',        canGeneral:true, canSiteExecution:true, person:'Supervisor' },
-  coordinator: { passHash: hashPassword(process.env.COORDINATOR_PASSWORD||'coordinator123'), role:'coordinator', name:'Project Coordinator', canGeneral:true, canSiteExecution:false },
-};
-
-const STAGE_NAME = ['Enquiry & Survey','Quotation','Work Order','Drawings','Procurement','Site Execution','Quality / QC','Client Update','Invoicing','Handover'];
+// ---- Process config constants ----
+const STAGE_NAME = ['Enquiry & Survey', 'Quotation', 'Work Order', 'Drawings', 'Procurement', 'Site Execution', 'Quality / QC', 'Client Update', 'Invoicing', 'Handover'];
 const STAGE_DOC = [
   'Initial meeting to understand the client\'s concept for the work. Key information is captured — site survey, existing plans and requirements — and a Job ID is generated.',
   'From the client\'s brief and our ideas we prepare proposal and concept design options. Project scope, budget and individual requirements are established, and a cost estimate (BOQ) is prepared.',
@@ -107,144 +152,242 @@ const STAGE_DOC = [
   'Stage-wise billing is raised as milestones complete — mobilization advance, foundation, structure and completion.',
   'As-built drawings, completion certificate, warranty and test certificates are bundled and handed over to the client.',
 ];
-const STEEL_SUB  = ['Foundation','Column & Beam Erection','Roof Purlin & Sheeting','Wall Cladding','MEP Rough-in','Flooring','Finishing & Handover'];
-const EPOXY_SUB  = ['Surface Preparation','Primer Coat','Base Coat','Top Coat','Cure & Inspection','Handover'];
-const VALID_SERVICES = ['warehouse','steel','epoxy','interior','exterior'];
-function subFor(service){ return service==='epoxy' ? EPOXY_SUB : STEEL_SUB; }
+const STEEL_SUB = ['Foundation', 'Column & Beam Erection', 'Roof Purlin & Sheeting', 'Wall Cladding', 'MEP Rough-in', 'Flooring', 'Finishing & Handover'];
+const EPOXY_SUB = ['Surface Preparation', 'Primer Coat', 'Base Coat', 'Top Coat', 'Cure & Inspection', 'Handover'];
+const VALID_SERVICES = ['warehouse', 'steel', 'epoxy', 'interior', 'exterior'];
 
-// The 10-stage process is now editable per-project — the assigned executor (Supervisor, or MD)
-// can insert a custom stage anywhere, rename any stage, and attach custom fields (text or a
-// document upload) to any stage. `kind:'site-execution'` marks the one stage that keeps its
-// special sub-stage sequence and person-gating, tracked by a stable id (not position number) so
-// inserting stages elsewhere never breaks it.
-function newStageId(){ return 'st-'+crypto.randomBytes(4).toString('hex'); }
-function newFieldId(){ return 'fld-'+crypto.randomBytes(3).toString('hex'); }
-function defaultStages(){
-  return STAGE_NAME.map((name,i)=>({ id:`st-${i+1}`, name, desc:STAGE_DOC[i], kind: i===5?'site-execution':null, fields:[] }));
+function subFor(service) { return service === 'epoxy' ? EPOXY_SUB : STEEL_SUB; }
+function newStageId() { return 'st-' + crypto.randomBytes(4).toString('hex'); }
+function newFieldId() { return 'fld-' + crypto.randomBytes(3).toString('hex'); }
+function defaultStages() {
+  return STAGE_NAME.map((name, i) => ({ id: `st-${i + 1}`, name, desc: STAGE_DOC[i], kind: i === 5 ? 'site-execution' : null, fields: [] }));
 }
-function canEditProcess(s){ return s.role==='md' || s.role==='supervisor'; }
-function canAdvanceStage(s, proj){
-  const cur = (proj.stages||[])[proj.stage-1]; if(!cur) return false;
-  if(s.role==='md') return true;
-  if(cur.kind==='site-execution') return !!(s.canSiteExecution && proj.assignees && proj.assignees[cur.id]===s.person);
+function emptyModules() { return { materials: [], payments: [], documents: [], po: [], moduleAssignees: { progress: '', materials: '', payments: '', documents: '' } }; }
+
+function canEditProcess(s) { return s.role === 'md' || s.role === 'supervisor'; }
+function canAdvanceStage(s, proj) {
+  const cur = (proj.stages || [])[proj.stage - 1]; if (!cur) return false;
+  if (s.role === 'md') return true;
+  if (cur.kind === 'site-execution') return !!(s.canSiteExecution && proj.assignees && proj.assignees[cur.id] === s.person);
   return !!s.canGeneral;
 }
-function canTouchStage(s, proj, stageObj){
-  if(s.role==='md') return true;
-  if(stageObj.kind==='site-execution') return !!(s.canSiteExecution && proj.assignees && proj.assignees[stageObj.id]===s.person);
+function canTouchStage(s, proj, stageObj) {
+  if (s.role === 'md') return true;
+  if (stageObj.kind === 'site-execution') return !!(s.canSiteExecution && proj.assignees && proj.assignees[stageObj.id] === s.person);
   return !!s.canGeneral;
 }
 
-// A project has 4 work areas the MD can hand out separately: the 10-stage progress tracker,
-// materials/procurement, payment milestones, and the document center. Each starts empty and
-// unassigned — nothing is fabricated. MD assigns each area to a role; only the MD or that role
-// can add/update items in it.
-const MODULES = ['progress','materials','payments','documents'];
-const MODULE_LABEL = {progress:'Project Progress', materials:'Materials & Procurement', payments:'Payment Milestones', documents:'Document Center'};
-const ROLE_NAME = {coordinator:'Project Coordinator', sitemanager:'Site Manager', supervisor:'Supervisor'};
-function canEditModule(s, proj, module){
-  if(s.role==='md') return true;
+const MODULES = ['progress', 'materials', 'payments', 'documents'];
+const MODULE_LABEL = { progress: 'Project Progress', materials: 'Materials & Procurement', payments: 'Payment Milestones', documents: 'Document Center' };
+const ROLE_NAME = { coordinator: 'Project Coordinator', sitemanager: 'Site Manager', supervisor: 'Supervisor' };
+
+function canEditModule(s, proj, module) {
+  if (s.role === 'md') return true;
   return !!(proj.moduleAssignees && proj.moduleAssignees[module] === s.role);
 }
-function emptyModules(){ return { materials:[], payments:[], documents:[], po:[], moduleAssignees:{progress:'',materials:'',payments:'',documents:''} }; }
 
-// Purchase Orders: raised against a vendor/supplier for materials, separate from the client-facing
-// modules above. Access is fixed to Supervisor + MD (not MD-assignable like the other modules) —
-// every project's Supervisor can raise a PO, and the MD can too/oversee all of them.
-const PO_STATUS = ['Draft','Sent','Acknowledged','Received'];
-function canEditPO(s){ return s.role==='md' || s.role==='supervisor'; }
-function nextPoId(){
-  let max=0;
-  projectsArray().forEach(pr=>{ (pr.po||[]).forEach(po=>{ const m=(po.id||'').match(/-(\d+)$/); if(m){ const n=parseInt(m[1],10); if(n>max) max=n; } }); });
-  return `PO-2026-${String(max+1).padStart(3,'0')}`;
-}
-const COMPANY = { name:'Sunworld Infra Pvt Ltd', address:'Coimbatore, Tamil Nadu, India', phone:'+91 98765 43210', email:'procurement@sunworldinfra.com', web:'www.sunworldinfra.com' };
-function poTotals(po){
-  const items = po.items||[];
-  const sub = items.reduce((s,it)=> s + (Number(it.qty)||0)*(Number(it.unitPrice)||0), 0);
-  const tax = sub * ((Number(po.taxPercent)||0)/100);
-  const ship = Number(po.shippingFee)||0;
-  return { sub, tax, ship, total: sub+tax+ship };
-}
-function esc(v){ return String(v==null?'':v).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+const PO_STATUS = ['Draft', 'Sent', 'Acknowledged', 'Received'];
+function canEditPO(s) { return s.role === 'md' || s.role === 'supervisor'; }
 
-// ---- Hand-rolled PDF writer (no library, no npm) ----
-// PDF's base-14 fonts (Helvetica) don't include the ₹ glyph, so amounts use "Rs." here —
-// the HTML views elsewhere keep ₹ since browser fonts render it fine.
+async function nextPoId() {
+  let max = 0;
+  (await db.getProjectsList()).forEach(pr => {
+    (pr.po || []).forEach(po => {
+      const m = (po.id || '').match(/-(\d+)$/);
+      if (m) {
+        const n = parseInt(m[1], 10);
+        if (n > max) max = n;
+      }
+    });
+  });
+  return `PO-2026-${String(max + 1).padStart(3, '0')}`;
+}
+
+const COMPANY = { name: 'Sunworld Infra Pvt Ltd', address: 'Coimbatore, Tamil Nadu, India', phone: '+91 98765 43210', email: 'procurement@sunworldinfra.com', web: 'www.sunworldinfra.com' };
+
+function poTotals(po) {
+  const items = po.items || [];
+  const sub = items.reduce((s, it) => s + (Number(it.qty) || 0) * (Number(it.unitPrice) || 0), 0);
+  const tax = sub * ((Number(po.taxPercent) || 0) / 100);
+  const ship = Number(po.shippingFee) || 0;
+  return { sub, tax, ship, total: sub + tax + ship };
+}
+
+function pctOf(p) {
+  const subs = subFor(p.service);
+  const stages = p.stages || defaultStages();
+  const cur = stages[p.stage - 1];
+  const isSiteExec = cur && cur.kind === 'site-execution';
+  const total = Math.max(1, stages.length - 1);
+  const frac = ((p.stage - 1) + (isSiteExec ? p.sub / subs.length : 0)) / total;
+  return Math.max(0, Math.min(100, Math.round(frac * 100)));
+}
+
+async function doAdvance(p, sess) {
+  let text;
+  const subs = subFor(p.service);
+  const stages = p.stages;
+  const cur = stages[p.stage - 1];
+  if (cur.kind === 'site-execution') {
+    if (p.sub < subs.length - 1) {
+      p.sub++;
+      text = `advanced ${p.name} to “${subs[p.sub]}”`;
+    } else {
+      p.sub = 0;
+      if (p.stage < stages.length) {
+        p.stage++;
+        text = `completed ${cur.name} on ${p.name} → moved to ${stages[p.stage - 1].name}`;
+      } else {
+        text = `completed ${cur.name} on ${p.name}`;
+      }
+    }
+  } else {
+    const from = cur.name;
+    if (p.stage < stages.length) {
+      p.stage++;
+      text = `completed ${from} on ${p.name} → moved to ${stages[p.stage - 1].name}`;
+    } else {
+      text = `completed ${from} on ${p.name}`;
+    }
+  }
+  if (p.note) p.note = '';
+  if (p.status !== 'ok') p.status = 'ok';
+  p.pct = pctOf(p);
+  
+  await db.updateProjectProgress(p.id, p.stage, p.sub, p.status, p.note, p.pct);
+  await db.addUpdate({
+    at: Date.now(),
+    role: sess.role,
+    roleName: sess.name,
+    projectId: p.id,
+    projectName: p.name,
+    stage: p.stage,
+    text: `${sess.name} ${text}`
+  });
+  return text;
+}
+
+async function nextJobId() {
+  let max = 0;
+  (await db.getProjectsList()).forEach(pr => {
+    const m = pr.id.match(/-(\d+)$/);
+    if (m) {
+      const n = parseInt(m[1], 10);
+      if (n > max) max = n;
+    }
+  });
+  return `SW-2026-${String(max + 1).padStart(3, '0')}`;
+}
+
+// ---- Outbound email (Resend) ----
+const RESEND_API_KEY = process.env.RESEND_API_KEY || '';
+const RESEND_FROM = process.env.RESEND_FROM || 'onboarding@resend.dev';
+async function sendPoEmail(proj, po) {
+  if (!RESEND_API_KEY) return { sent: false, reason: 'RESEND_API_KEY not configured' };
+  if (!po.vendor.email) return { sent: false, reason: 'Vendor has no email address' };
+  try {
+    const pdf = poPdfBuffer(proj, po);
+    const html = `<p>Dear ${esc(po.vendor.name)},</p>
+      <p>Please find attached Purchase Order <b>${esc(po.id)}</b> from ${esc(COMPANY.name)} for project <b>${esc(proj.name)}</b>.</p>
+      <p>Ship Via: ${esc(po.shipVia || '-')}<br>FOB: ${esc(po.fob || '-')}<br>Shipping Terms: ${esc(po.shippingTerms || '-')}</p>
+      <p>Regards,<br>${esc(COMPANY.name)}</p>`;
+      
+    const r = await fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from: RESEND_FROM,
+        to: po.vendor.email,
+        subject: `Purchase Order ${po.id} — ${COMPANY.name}`,
+        html,
+        attachments: [{ filename: `${po.id}.pdf`, content: pdf.toString('base64') }]
+      })
+    });
+    if (!r.ok) {
+      const t = await r.text();
+      return { sent: false, reason: `Resend error: ${t.slice(0, 200)}` };
+    }
+    return { sent: true };
+  } catch (e) {
+    return { sent: false, reason: e.message };
+  }
+}
+function esc(v) { return String(v == null ? '' : v).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
+// ---- Hand-rolled PDF writer ----
 const NAVY = '0.109 0.227 0.419';
-function pdfEsc(s){ return String(s==null?'':s).replace(/\\/g,'\\\\').replace(/\(/g,'\\(').replace(/\)/g,'\\)'); }
-function pdfMoney(n){ return 'Rs. '+Number(n||0).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2}); }
-function poPdfBuffer(proj, po){
+function pdfEsc(s) { return String(s == null ? '' : s).replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)'); }
+function pdfMoney(n) { return 'Rs. ' + Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+function poPdfBuffer(proj, po) {
   const t = poTotals(po);
-  const v = po.vendor||{}, sh = po.shipTo||{};
+  const v = po.vendor || {}, sh = po.shipTo || {};
   const ops = [];
-  const text = (x,y,size,s,opts={}) => {
+  const text = (x, y, size, s, opts = {}) => {
     const font = opts.bold ? '/F2' : '/F1';
     const color = opts.color || '0 0 0';
     ops.push(`q ${color} rg BT ${font} ${size} Tf 1 0 0 1 ${x} ${y} Tm (${pdfEsc(s)}) Tj ET Q`);
   };
-  const rule = (x1,y,x2,w,color) => ops.push(`q ${color||NAVY} RG ${w} w ${x1} ${y} m ${x2} ${y} l S Q`);
-  const rectFill = (x,y,w,h,color) => ops.push(`q ${color} rg ${x} ${y} ${w} ${h} re f Q`);
+  const rule = (x1, y, x2, w, color) => ops.push(`q ${color || NAVY} RG ${w} w ${x1} ${y} m ${x2} ${y} l S Q`);
+  const rectFill = (x, y, w, h, color) => ops.push(`q ${color} rg ${x} ${y} ${w} ${h} re f Q`);
 
-  const L = 40, R = 555; // left/right content margins on an A4 (595pt wide) page
+  const L = 40, R = 555;
   rectFill(0, 822, 595, 10, NAVY);
-  text(L, 775, 24, 'PURCHASE ORDER', {bold:true, color:NAVY});
+  text(L, 775, 24, 'PURCHASE ORDER', { bold: true, color: NAVY });
 
-  // company block (left) + PO meta (right)
   let y = 748;
-  text(L, y, 11, COMPANY.name, {bold:true}); y -= 14;
-  [COMPANY.address, COMPANY.phone, COMPANY.email, COMPANY.web].forEach(l=>{ text(L, y, 10, l); y -= 13; });
+  text(L, y, 11, COMPANY.name, { bold: true }); y -= 14;
+  [COMPANY.address, COMPANY.phone, COMPANY.email, COMPANY.web].forEach(l => { text(L, y, 10, l); y -= 13; });
   const metaX = 380, metaValX = 460;
   let my = 748;
-  [['PO Number',po.id], ['Date',po.date||''], ['Ship Via',po.shipVia||'-'], ['FOB',po.fob||'-'], ['Shipping Terms',po.shippingTerms||'-'], ['Status',po.status]].forEach(([k,val])=>{
-    text(metaX, my, 9.5, k, {color:'0.35 0.35 0.35'}); text(metaValX, my, 9.5, String(val), {bold:true}); my -= 15;
+  [['PO Number', po.id], ['Date', po.date || ''], ['Ship Via', po.shipVia || '-'], ['FOB', po.fob || '-'], ['Shipping Terms', po.shippingTerms || '-'], ['Status', po.status]].forEach(([k, val]) => {
+    text(metaX, my, 9.5, k, { color: '0.35 0.35 0.35' }); text(metaValX, my, 9.5, String(val), { bold: true }); my -= 15;
   });
 
   y = Math.min(y, my) - 12;
   rule(L, y, R, 1.4); y -= 20;
   const vY0 = y;
-  text(L, y, 10, 'VENDOR', {bold:true, color:NAVY}); y -= 15;
-  text(L, y, 10.5, v.name||'', {bold:true}); y -= 13;
-  [v.address, v.phone, v.email].filter(Boolean).forEach(l=>{ text(L, y, 9.5, l); y -= 13; });
+  text(L, y, 10, 'VENDOR', { bold: true, color: NAVY }); y -= 15;
+  text(L, y, 10.5, v.name || '', { bold: true }); y -= 13;
+  [v.address, v.phone, v.email].filter(Boolean).forEach(l => { text(L, y, 9.5, l); y -= 13; });
   let sy = vY0;
-  text(metaX, sy, 10, 'SHIP TO', {bold:true, color:NAVY}); sy -= 15;
-  text(metaX, sy, 10.5, sh.name||proj.name, {bold:true}); sy -= 13;
-  (sh.address ? [sh.address] : [proj.site]).concat([sh.phone, sh.email].filter(Boolean)).forEach(l=>{ text(metaX, sy, 9.5, l); sy -= 13; });
+  text(metaX, sy, 10, 'SHIP TO', { bold: true, color: NAVY }); sy -= 15;
+  text(metaX, sy, 10.5, sh.name || proj.name, { bold: true }); sy -= 13;
+  (sh.address ? [sh.address] : [proj.site]).concat([sh.phone, sh.email].filter(Boolean)).forEach(l => { text(metaX, sy, 9.5, l); sy -= 13; });
 
   y = Math.min(y, sy) - 8;
   rule(L, y, R, 1.4); y -= 24;
 
-  const colItem=L, colQty=310, colPrice=380, colTotal=475;
-  text(colItem, y, 9.5, 'ITEM DETAILS', {bold:true, color:NAVY});
-  text(colQty, y, 9.5, 'QTY', {bold:true, color:NAVY});
-  text(colPrice, y, 9.5, 'UNIT PRICE', {bold:true, color:NAVY});
-  text(colTotal, y, 9.5, 'TOTAL', {bold:true, color:NAVY});
+  const colItem = L, colQty = 310, colPrice = 380, colTotal = 475;
+  text(colItem, y, 9.5, 'ITEM DETAILS', { bold: true, color: NAVY });
+  text(colQty, y, 9.5, 'QTY', { bold: true, color: NAVY });
+  text(colPrice, y, 9.5, 'UNIT PRICE', { bold: true, color: NAVY });
+  text(colTotal, y, 9.5, 'TOTAL', { bold: true, color: NAVY });
   y -= 8; rule(L, y, R, 1.4); y -= 18;
 
-  (po.items||[]).forEach(it=>{
-    const lineTotal = (Number(it.qty)||0)*(Number(it.unitPrice)||0);
-    text(colItem, y, 10, it.name||'', {bold:true});
-    text(colQty, y, 10, String(it.qty||0));
+  (po.items || []).forEach(it => {
+    const lineTotal = (Number(it.qty) || 0) * (Number(it.unitPrice) || 0);
+    text(colItem, y, 10, it.name || '', { bold: true });
+    text(colQty, y, 10, String(it.qty || 0));
     text(colPrice, y, 10, pdfMoney(it.unitPrice));
     text(colTotal, y, 10, pdfMoney(lineTotal));
     y -= 13;
-    if(it.desc){ text(colItem, y, 8.5, it.desc, {color:'0.45 0.45 0.45'}); y -= 13; }
-    y -= 3; rule(L, y+9, R, 0.6, '0.85 0.85 0.85'); y -= 8;
-    if(y < 110) return; // stop rather than overflow the page (demo-scale POs only)
+    if (it.desc) { text(colItem, y, 8.5, it.desc, { color: '0.45 0.45 0.45' }); y -= 13; }
+    y -= 3; rule(L, y + 9, R, 0.6, '0.85 0.85 0.85'); y -= 8;
+    if (y < 110) return;
   });
 
   y -= 12;
   const sumLabelX = 400, sumValX = 555, sumX0 = 380;
-  const sumLine = (label, val, opts={}) => {
-    text(sumLabelX, y, opts.size||10, label, {color: opts.color});
-    text(sumValX-70, y, opts.size||10, val, {bold:opts.bold, color:opts.color});
-    y -= (opts.gap||16);
+  const sumLine = (label, val, opts = {}) => {
+    text(sumLabelX, y, opts.size || 10, label, { color: opts.color });
+    text(sumValX - 70, y, opts.size || 10, val, { bold: opts.bold, color: opts.color });
+    y -= (opts.gap || 16);
   };
   sumLine('Sub Total', pdfMoney(t.sub));
-  sumLine(`Tax${po.taxPercent?` (${po.taxPercent}%)`:''}`, pdfMoney(t.tax));
+  sumLine(`Tax${po.taxPercent ? ` (${po.taxPercent}%)` : ''}`, pdfMoney(t.tax));
   sumLine('Shipping Fee', pdfMoney(t.ship));
-  rule(sumX0, y+10, R, 1.4);
-  sumLine('Total', pdfMoney(t.total), {bold:true, color:NAVY, size:13, gap:0});
+  rule(sumX0, y + 10, R, 1.4);
+  sumLine('Total', pdfMoney(t.total), { bold: true, color: NAVY, size: 13, gap: 0 });
 
   const content = ops.join('\n');
   const objs = [];
@@ -253,585 +396,852 @@ function poPdfBuffer(proj, po){
   objs.push('3 0 obj << /Type /Page /Parent 2 0 R /Resources << /Font << /F1 4 0 R /F2 5 0 R >> >> /MediaBox [0 0 595 842] /Contents 6 0 R >> endobj\n');
   objs.push('4 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj\n');
   objs.push('5 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >> endobj\n');
-  objs.push(`6 0 obj << /Length ${Buffer.byteLength(content,'latin1')} >> stream\n${content}\nendstream endobj\n`);
+  objs.push(`6 0 obj << /Length ${Buffer.byteLength(content, 'latin1')} >> stream\n${content}\nendstream endobj\n`);
 
   let out = '%PDF-1.4\n';
   const offsets = [0];
-  objs.forEach(o=>{ offsets.push(Buffer.byteLength(out,'latin1')); out += o; });
-  const xrefStart = Buffer.byteLength(out,'latin1');
-  out += `xref\n0 ${objs.length+1}\n0000000000 65535 f \n`;
-  for(let i=1;i<=objs.length;i++) out += String(offsets[i]).padStart(10,'0') + ' 00000 n \n';
-  out += `trailer << /Size ${objs.length+1} /Root 1 0 R >>\nstartxref\n${xrefStart}\n%%EOF`;
+  objs.forEach(o => { offsets.push(Buffer.byteLength(out, 'latin1')); out += o; });
+  const xrefStart = Buffer.byteLength(out, 'latin1');
+  out += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n`;
+  for (let i = 1; i <= objs.length; i++) out += String(offsets[i]).padStart(10, '0') + ' 00000 n \n';
+  out += `trailer << /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${xrefStart}\n%%EOF`;
   return Buffer.from(out, 'latin1');
 }
 
-// ---- Seed data — 28 projects spread across all 5 services ----
-// Empty by design — Kishore populates real clients via "+ New Project" in the app.
-// (Previously seeded with 28 sample projects across all 5 services for demo purposes.)
-const SEED = [];
+// ---- Database Migration and User Seeding ----
+async function migrateAndSeed() {
+  await db.initDb();
 
-function pctOf(p){
-  const subs = subFor(p.service);
-  const stages = p.stages || defaultStages();
-  const cur = stages[p.stage-1];
-  const isSiteExec = cur && cur.kind==='site-execution';
-  const total = Math.max(1, stages.length-1);
-  const frac = ((p.stage-1) + (isSiteExec ? p.sub/subs.length : 0)) / total;
-  return Math.max(0, Math.min(100, Math.round(frac*100)));
-}
+  // Create default system users if they don't exist
+  const USERS_SEED = [
+    { user: 'admin', passHash: hashPassword(process.env.ADMIN_PASSWORD || 'admin123'), role: 'md', name: 'Managing Director', canGeneral: 1, canSiteExecution: 1, person: null },
+    { user: 'sitemanager', passHash: hashPassword(process.env.SITEMANAGER_PASSWORD || 'sitemanager123'), role: 'sitemanager', name: 'Site Manager', canGeneral: 0, canSiteExecution: 1, person: 'Site Manager' },
+    { user: 'supervisor', passHash: hashPassword(process.env.SUPERVISOR_PASSWORD || 'supervisor123'), role: 'supervisor', name: 'Supervisor', canGeneral: 1, canSiteExecution: 1, person: 'Supervisor' },
+    { user: 'coordinator', passHash: hashPassword(process.env.COORDINATOR_PASSWORD || 'coordinator123'), role: 'coordinator', name: 'Project Coordinator', canGeneral: 1, canSiteExecution: 0, person: null }
+  ];
 
-// ---- Persistence ----
-function loadDB(){ try { return JSON.parse(fs.readFileSync(DB,'utf8')); } catch { return {}; } }
-// Atomic write (write to a temp file, then rename into place) so a crash mid-save can never leave
-// db.json half-written/corrupted — the rename is a single atomic filesystem operation. Also keeps
-// a few rotating backups as cheap insurance against a bad write, with no external backup system.
-function saveDB(){
-  try{
-    const json = JSON.stringify(db,null,2);
-    const tmp = DB + '.tmp';
-    fs.writeFileSync(tmp, json);
-    try{
-      if(fs.existsSync(DB+'.bak2')) fs.renameSync(DB+'.bak2', DB+'.bak3');
-      if(fs.existsSync(DB+'.bak1')) fs.renameSync(DB+'.bak1', DB+'.bak2');
-      if(fs.existsSync(DB)) fs.copyFileSync(DB, DB+'.bak1');
-    }catch(e){ logError('saveDB-backup-rotation', e); }
-    fs.renameSync(tmp, DB);
-  }catch(e){ logError('saveDB', e); }
-}
-let db = loadDB();
-function seedProjects(){ db.projects = {}; SEED.forEach(p=>{ const proj = Object.assign({}, p, emptyModules(), {assignees:{}, stages:defaultStages()}); proj.pct = pctOf(proj); db.projects[p.id] = proj; }); }
-if(!db.projects){ seedProjects(); }
-if(!db.updates){ db.updates = []; }
-if(!db.sessions){ db.sessions = {}; }
-saveDB();
+  for (const u of USERS_SEED) {
+    await db.insertUser(u.user, u.passHash, u.role, u.name, u.canGeneral, u.canSiteExecution, u.person);
+  }
 
-function projectsArray(){ return Object.values(db.projects); }
-function nextJobId(){
-  let max=0;
-  Object.keys(db.projects).forEach(id=>{ const m=id.match(/-(\d+)$/); if(m){ const n=parseInt(m[1],10); if(n>max) max=n; } });
-  return `SW-2026-${String(max+1).padStart(3,'0')}`;
-}
+  // Check if a legacy db.json file needs to be migrated to SQLite
+  const DB_JSON_PATH = path.join(ROOT, 'db.json');
+  if (fs.existsSync(DB_JSON_PATH)) {
+    try {
+      console.log('[migration] Found db.json, checking if migration is needed...');
+      const data = JSON.parse(fs.readFileSync(DB_JSON_PATH, 'utf8'));
+      
+      const count = (await db.getProjectsList()).length;
+      if (count === 0 && data.projects) {
+        console.log('[migration] Importing projects into SQLite db...');
+        for (const p of Object.values(data.projects)) {
+          await db.createProject(p);
+        }
+        console.log(`[migration] Successfully migrated ${Object.keys(data.projects).length} projects.`);
+      }
 
-function doAdvance(p, sess){
-  let text;
-  const subs = subFor(p.service);
-  const stages = p.stages;
-  const cur = stages[p.stage-1];
-  if(cur.kind==='site-execution'){
-    if(p.sub < subs.length-1){
-      p.sub++;
-      text = `advanced ${p.name} to “${subs[p.sub]}”`;
-    } else {
-      p.sub = 0;
-      if(p.stage < stages.length){ p.stage++; text = `completed ${cur.name} on ${p.name} → moved to ${stages[p.stage-1].name}`; }
-      else { text = `completed ${cur.name} on ${p.name}`; }
+      // Migrate log updates
+      const updateCount = (await db.getUpdatesList(100)).length;
+      if (updateCount === 0 && Array.isArray(data.updates)) {
+        console.log('[migration] Importing update logs into SQLite db...');
+        const reversedUpdates = [...data.updates].reverse(); // reverse to preserve order
+        for (const u of reversedUpdates) {
+          await db.addUpdate(u);
+        }
+      }
+
+      // Migrate session storage
+      const sessionsCount = Object.keys(await db.getAllSessions()).length;
+      if (sessionsCount === 0 && data.sessions) {
+        console.log('[migration] Importing legacy active sessions...');
+        for (const [sid, s] of Object.entries(data.sessions)) {
+          await db.saveSession(sid, s);
+        }
+      }
+
+      // Rename db.json to make migration non-recurring
+      fs.renameSync(DB_JSON_PATH, DB_JSON_PATH + '.migrated');
+      console.log('[migration] Migration complete. Renamed db.json to db.json.migrated.');
+    } catch (e) {
+      console.error('[migration] Migration process failed:', e);
     }
-  } else {
-    const from = cur.name;
-    if(p.stage < stages.length){ p.stage++; text = `completed ${from} on ${p.name} → moved to ${stages[p.stage-1].name}`; }
-    else { text = `completed ${from} on ${p.name}`; }
   }
-  if(p.note) p.note = '';
-  if(p.status !== 'ok') p.status = 'ok';
-  p.pct = pctOf(p);
-  db.updates.unshift({ at:Date.now(), role:sess.role, roleName:sess.name, projectId:p.id, projectName:p.name, stage:p.stage, text:`${sess.name} ${text}` });
-  db.updates = db.updates.slice(0,40);
-  return text;
 }
 
-// ---- Sessions ----
-// Persisted into db.json (db.sessions) alongside project data, so a server restart or crash no
-// longer force-logs-out everyone mid-work — only real logout or the 24h expiry does. Kept as an
-// in-memory Map for fast per-request lookup, synced to db.sessions on every login/logout.
-const SESSION_MAX_AGE_MS = 24*60*60*1000;
-const sessions = new Map(); // sid -> {user, role, name, canGeneral, canSiteExecution, person, csrf, createdAt}
-function loadSessionsFromDB(){
-  const now = Date.now();
-  Object.entries(db.sessions||{}).forEach(([sid,s])=>{
-    if(s.createdAt && (now - s.createdAt) < SESSION_MAX_AGE_MS) sessions.set(sid, s);
-  });
-}
-function persistSessions(){ db.sessions = Object.fromEntries(sessions); saveDB(); }
-loadSessionsFromDB();
+// Initialize database
+migrateAndSeed().catch(err => console.error('[migration] Startup failed:', err));
 
-function parseCookies(req){
-  const h = req.headers.cookie || '';
-  return Object.fromEntries(h.split(';').map(v=>v.trim().split('=').map(decodeURIComponent)).filter(a=>a[0]));
-}
-function getSession(req){ const c=parseCookies(req); return c.sw_sid ? sessions.get(c.sw_sid) : null; }
-
-// ---- Login rate-limiting: lock out repeated failed attempts per username for a short cooldown ----
-const loginAttempts = new Map(); // username -> {count, lockUntil}
-const MAX_LOGIN_ATTEMPTS = 5, LOGIN_LOCKOUT_MS = 60*1000;
-function checkLoginLock(key){
-  const a = loginAttempts.get(key);
-  if(a && a.lockUntil && Date.now() < a.lockUntil) return Math.ceil((a.lockUntil-Date.now())/1000);
-  return 0;
-}
-function recordLoginFailure(key){
-  const a = loginAttempts.get(key) || {count:0, lockUntil:0};
-  a.count++;
-  if(a.count >= MAX_LOGIN_ATTEMPTS) a.lockUntil = Date.now() + LOGIN_LOCKOUT_MS;
-  loginAttempts.set(key, a);
-}
-function clearLoginFailures(key){ loginAttempts.delete(key); }
-
-// ---- CSRF: a random per-session token the client must echo back (header) on every state-changing
-// request. Login/logout are exempt (no session yet / clearing it). Cheap double-submit pattern —
-// no external library, just a comparison against the session's own stored token.
-function requireCsrf(req, session){
-  if(!session) return false;
-  const token = req.headers['x-csrf-token'];
-  return !!token && token === session.csrf;
-}
-function send(res, code, body, headers={}){ res.writeHead(code, headers); res.end(body); }
-function json(res, code, obj, headers={}){ send(res, code, JSON.stringify(obj), Object.assign({'Content-Type':'application/json'}, headers)); }
-// Both readers cap total size so a huge or malicious body can't exhaust server memory — the
-// request is aborted and the promise rejects once the limit is crossed, rather than buffering
-// unbounded data.
-// Note: deliberately does NOT call req.destroy() when the limit is crossed — destroying the
-// socket mid-parse can throw inside Node's own HTTP internals (observed during testing). Instead
-// we just stop buffering (memory stays bounded) and let the request drain naturally, rejecting
-// once we know it's oversized so the caller gets a clean 413 rather than the process crashing.
-function readBody(req, maxBytes=MAX_BODY_BYTES){
-  return new Promise((resolve,reject)=>{
-    let d=''; let bytes=0; let tooLarge=false; let settled=false;
-    req.on('data',c=>{
-      if(tooLarge) return;
-      bytes += c.length;
-      if(bytes > maxBytes){ tooLarge=true; return; }
-      d += c;
-    });
-    req.on('end',()=>{ if(settled) return; settled=true; tooLarge ? reject(new Error('Request body too large')) : resolve(d); });
-    req.on('error', e=>{ if(settled) return; settled=true; reject(e); });
-  });
-}
-function readBodyBuffer(req, maxBytes=MAX_UPLOAD_BYTES){
-  return new Promise((resolve,reject)=>{
-    const chunks=[]; let bytes=0; let tooLarge=false; let settled=false;
-    req.on('data',c=>{
-      if(tooLarge) return;
-      bytes += c.length;
-      if(bytes > maxBytes){ tooLarge=true; chunks.length=0; return; }
-      chunks.push(c);
-    });
-    req.on('end',()=>{ if(settled) return; settled=true; tooLarge ? reject(new Error('Upload too large')) : resolve(Buffer.concat(chunks)); });
-    req.on('error', e=>{ if(settled) return; settled=true; reject(e); });
-  });
-}
-// Minimal multipart/form-data parser (no library) — good enough for simple field+file uploads.
-function parseMultipart(buffer, boundary){
-  const parts = [];
-  const boundaryBuf = Buffer.from(`--${boundary}`);
-  let start = buffer.indexOf(boundaryBuf) + boundaryBuf.length;
-  while(true){
-    const next = buffer.indexOf(boundaryBuf, start);
-    if(next===-1) break;
-    let chunk = buffer.slice(start, next);
-    if(chunk.slice(0,2).toString('latin1')==='\r\n') chunk = chunk.slice(2);
-    if(chunk.slice(-2).toString('latin1')==='\r\n') chunk = chunk.slice(0,-2);
-    const headerEnd = chunk.indexOf('\r\n\r\n');
-    if(headerEnd!==-1){
-      const headerStr = chunk.slice(0,headerEnd).toString('utf8');
-      const data = chunk.slice(headerEnd+4);
-      const nameMatch = headerStr.match(/name="([^"]*)"/);
-      const filenameMatch = headerStr.match(/filename="([^"]*)"/);
-      parts.push({ name: nameMatch?nameMatch[1]:'', filename: filenameMatch?filenameMatch[1]:null, data });
-    }
-    start = next + boundaryBuf.length;
-    if(buffer.slice(start, start+2).toString('latin1')==='--') break;
+// Session cleaner (runs every hour)
+const SESSION_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+setInterval(async () => {
+  try {
+    await db.cleanExpiredSessions(SESSION_MAX_AGE_MS);
+  } catch (e) {
+    logError('session-cleanup', e);
   }
-  return parts;
-}
+}, 60 * 60 * 1000);
 
-const MIME = { '.html':'text/html','.css':'text/css','.js':'text/javascript','.json':'application/json','.svg':'image/svg+xml','.ico':'image/x-icon','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.webp':'image/webp','.pdf':'application/pdf','.doc':'application/msword','.docx':'application/vnd.openxmlformats-officedocument.wordprocessingml.document','.xls':'application/vnd.ms-excel','.xlsx':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' };
-function serveFile(res, fp){ fs.readFile(fp,(e,data)=>{ if(e) return send(res,404,'Not found'); send(res,200,data,{'Content-Type':MIME[path.extname(fp)]||'text/plain'}); }); }
+// ---- PAGE ROUTES ----
+app.get('/login', (req, res) => {
+  res.sendFile(path.join(PUB, 'login.html'));
+});
 
-async function handleRequest(req, res){
-  const u = new URL(req.url,'http://localhost');
-  const p = u.pathname;
+app.get(['/', '/app', '/team'], (req, res) => {
+  if (!req.session) {
+    return res.redirect('/login');
+  }
+  const file = req.session.role === 'md' ? 'app.html' : 'team.html';
+  res.sendFile(path.join(PUB, file));
+});
 
-  if(p==='/health'){
-    return json(res,200,{ok:true, uptimeSeconds:Math.round(process.uptime()), time:new Date().toISOString()});
+// ---- API ENDPOINTS ----
+
+// Login Endpoint
+app.post('/api/login', authLimiter, async (req, res) => {
+  const usernameInput = (req.body.user || '').toLowerCase().trim();
+  const passwordInput = req.body.pass || '';
+  
+  if (!usernameInput || !passwordInput) {
+    return res.status(400).json({ error: 'Username and password are required' });
   }
 
-  // CSRF gate: every state-changing request (POST, logged in) must echo back its session's own
-  // token. Login itself is exempt (no session/token exists yet). If there's no session at all,
-  // fall through so the route's own auth check returns the more accurate 401.
-  if(req.method==='POST' && p.startsWith('/api/') && p!=='/api/login'){
-    const s = getSession(req);
-    if(s && !requireCsrf(req, s)) return json(res,403,{error:'Invalid or missing CSRF token'});
-  }
-
-  // ---- API ----
-  if(p==='/api/login' && req.method==='POST'){
-    const body=await readBody(req); let d={}; try{d=JSON.parse(body)}catch{}
-    const key=(d.user||'').toLowerCase().trim();
-    const lockedSecs = checkLoginLock(key);
-    if(lockedSecs) return json(res,429,{ok:false, error:`Too many failed attempts — try again in ${lockedSecs}s`});
-    const U=USERS[key];
-    if(U && verifyPassword(d.pass, U.passHash)){
-      clearLoginFailures(key);
-      const sid=crypto.randomBytes(16).toString('hex');
-      const csrf=crypto.randomBytes(24).toString('hex');
-      sessions.set(sid, {user:key, role:U.role, name:U.name, canGeneral:U.canGeneral, canSiteExecution:U.canSiteExecution, person:U.person, csrf, createdAt:Date.now()});
-      persistSessions();
-      return json(res,200,{ok:true, role:U.role, name:U.name, csrf}, {'Set-Cookie':`sw_sid=${sid}; Path=/; HttpOnly; Max-Age=86400; SameSite=Lax`});
-    }
-    recordLoginFailure(key);
-    return json(res,401,{ok:false, error:'Invalid username or password'});
-  }
-  if(p==='/api/logout' && req.method==='POST'){
-    const c=parseCookies(req); sessions.delete(c.sw_sid); persistSessions();
-    return json(res,200,{ok:true},{'Set-Cookie':'sw_sid=; Path=/; Max-Age=0'});
-  }
-  if(p==='/api/me'){
-    const s=getSession(req); if(!s) return json(res,401,{error:'auth'});
-    return json(res,200,{user:s.user, role:s.role, name:s.name, canGeneral:s.canGeneral, canSiteExecution:s.canSiteExecution, person:s.person, csrf:s.csrf});
-  }
-  if(p==='/api/projects'){
-    const s=getSession(req); if(!s) return json(res,401,{error:'auth'});
-    return json(res,200,{ projects:projectsArray(), updates:db.updates.slice(0,15) });
-  }
-  if(p==='/api/projects/create' && req.method==='POST'){
-    const s=getSession(req); if(!s) return json(res,401,{error:'auth'});
-    if(s.role!=='md') return json(res,403,{error:'Only the Managing Director can start a new project'});
-    const body=await readBody(req); let d={}; try{d=JSON.parse(body)}catch{}
-    const name=(d.name||'').trim(), site=(d.site||'').trim(), service=(d.service||'').trim();
-    if(!name || !site) return json(res,400,{error:'Client name and site are required'});
-    if(!VALID_SERVICES.includes(service)) return json(res,400,{error:'Invalid service'});
-    const id = nextJobId();
-    const start = new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'});
-    const proj = Object.assign({
-      id, service, name, site,
-      tag: (d.tag||'').trim() || 'New project',
-      val: (d.val||'').trim() || '₹0.0 L',
-      team:'Unassigned', start, delivery: (d.delivery||'').trim() || '—',
-      stage:1, sub:0, status:'ok', note:'', assignees:{}, stages:defaultStages()
-    }, emptyModules());
-    proj.pct = pctOf(proj);
-    db.projects[id] = proj;
-    db.updates.unshift({ at:Date.now(), role:s.role, roleName:s.name, projectId:id, projectName:name, stage:1, text:`${s.name} started a new project: ${name} — assign it to your team to begin` });
-    db.updates = db.updates.slice(0,40);
-    saveDB();
-    return json(res,200,{ ok:true, project:proj, updates:db.updates.slice(0,15) });
-  }
-  if(p.startsWith('/api/projects/') && p.endsWith('/advance') && req.method==='POST'){
-    const s=getSession(req); if(!s) return json(res,401,{error:'auth'});
-    const id=p.split('/')[3];
-    const proj=db.projects[id]; if(!proj) return json(res,404,{error:'not found'});
-    if(!canAdvanceStage(s, proj)) return json(res,403,{error:'This task is not assigned to you, or your role cannot update this stage'});
-    doAdvance(proj, s); saveDB();
-    return json(res,200,{ ok:true, project:proj, updates:db.updates.slice(0,15) });
-  }
-  if(p.startsWith('/api/projects/') && p.endsWith('/assign') && req.method==='POST'){
-    const s=getSession(req); if(!s) return json(res,401,{error:'auth'});
-    if(s.role!=='md') return json(res,403,{error:'Only the Managing Director can assign teams'});
-    const id=p.split('/')[3];
-    const proj=db.projects[id]; if(!proj) return json(res,404,{error:'not found'});
-    const body=await readBody(req); let d={}; try{d=JSON.parse(body)}catch{}
-    const team=(d.team||'').trim();
-    if(!team) return json(res,400,{error:'team required'});
-    proj.team = team;
-    db.updates.unshift({ at:Date.now(), role:s.role, roleName:s.name, projectId:proj.id, projectName:proj.name, stage:proj.stage, text:`${s.name} assigned ${team} to ${proj.name}` });
-    db.updates = db.updates.slice(0,40);
-    saveDB();
-    return json(res,200,{ ok:true, project:proj, updates:db.updates.slice(0,15) });
-  }
-  if(p.startsWith('/api/projects/') && p.endsWith('/assign-stage') && req.method==='POST'){
-    const s=getSession(req); if(!s) return json(res,401,{error:'auth'});
-    if(s.role!=='md') return json(res,403,{error:'Only the Managing Director can assign people to tasks'});
-    const id=p.split('/')[3];
-    const proj=db.projects[id]; if(!proj) return json(res,404,{error:'not found'});
-    const body=await readBody(req); let d={}; try{d=JSON.parse(body)}catch{}
-    const stageId=(d.stageId||'').trim(); const person=(d.person||'').trim();
-    const stageObj = (proj.stages||[]).find(x=>x.id===stageId);
-    if(!stageObj) return json(res,400,{error:'invalid stage'});
-    proj.assignees = proj.assignees || {};
-    if(person && person!=='Unassigned'){ proj.assignees[stageId]=person; } else { delete proj.assignees[stageId]; }
-    db.updates.unshift({ at:Date.now(), role:s.role, roleName:s.name, projectId:proj.id, projectName:proj.name, stage:proj.stage, text:`${s.name} assigned ${person||'no one'} to ${stageObj.name} on ${proj.name}` });
-    db.updates = db.updates.slice(0,40);
-    saveDB();
-    return json(res,200,{ ok:true, project:proj, updates:db.updates.slice(0,15) });
-  }
-  if(p.startsWith('/api/projects/') && p.endsWith('/stage/add') && req.method==='POST'){
-    const s=getSession(req); if(!s) return json(res,401,{error:'auth'});
-    if(!canEditProcess(s)) return json(res,403,{error:'Only the Supervisor or Managing Director can edit the process'});
-    const id=p.split('/')[3];
-    const proj=db.projects[id]; if(!proj) return json(res,404,{error:'not found'});
-    const body=await readBody(req); let d={}; try{d=JSON.parse(body)}catch{}
-    const name=(d.name||'').trim(); if(!name) return json(res,400,{error:'Step name is required'});
-    const afterStageId=(d.afterStageId||'').trim();
-    const newStage = { id:newStageId(), name, desc:'', kind:null, fields:[] };
-    let insertAt = proj.stages.length;
-    if(afterStageId==='start') insertAt = 0;
-    else if(afterStageId){ const idx=proj.stages.findIndex(x=>x.id===afterStageId); if(idx>=0) insertAt = idx+1; }
-    proj.stages.splice(insertAt, 0, newStage);
-    if(insertAt <= proj.stage-1) proj.stage++;
-    proj.pct = pctOf(proj);
-    db.updates.unshift({ at:Date.now(), role:s.role, roleName:s.name, projectId:proj.id, projectName:proj.name, stage:proj.stage, text:`${s.name} added a new step "${name}" to the process on ${proj.name}` });
-    db.updates = db.updates.slice(0,40);
-    saveDB();
-    return json(res,200,{ ok:true, project:proj, updates:db.updates.slice(0,15) });
-  }
-  if(p.startsWith('/api/projects/') && p.endsWith('/stage/rename') && req.method==='POST'){
-    const s=getSession(req); if(!s) return json(res,401,{error:'auth'});
-    if(!canEditProcess(s)) return json(res,403,{error:'Only the Supervisor or Managing Director can edit the process'});
-    const id=p.split('/')[3];
-    const proj=db.projects[id]; if(!proj) return json(res,404,{error:'not found'});
-    const body=await readBody(req); let d={}; try{d=JSON.parse(body)}catch{}
-    const stageId=(d.stageId||'').trim(); const name=(d.name||'').trim();
-    if(!name) return json(res,400,{error:'Name is required'});
-    const stageObj = (proj.stages||[]).find(x=>x.id===stageId); if(!stageObj) return json(res,404,{error:'stage not found'});
-    const oldName = stageObj.name;
-    stageObj.name = name;
-    db.updates.unshift({ at:Date.now(), role:s.role, roleName:s.name, projectId:proj.id, projectName:proj.name, stage:proj.stage, text:`${s.name} renamed "${oldName}" to "${name}" on ${proj.name}` });
-    db.updates = db.updates.slice(0,40);
-    saveDB();
-    return json(res,200,{ ok:true, project:proj, updates:db.updates.slice(0,15) });
-  }
-  if(p.startsWith('/api/projects/') && p.endsWith('/stage/field/add') && req.method==='POST'){
-    const s=getSession(req); if(!s) return json(res,401,{error:'auth'});
-    if(!canEditProcess(s)) return json(res,403,{error:'Only the Supervisor or Managing Director can edit the process'});
-    const id=p.split('/')[3];
-    const proj=db.projects[id]; if(!proj) return json(res,404,{error:'not found'});
-    const body=await readBody(req); let d={}; try{d=JSON.parse(body)}catch{}
-    const stageId=(d.stageId||'').trim(); const label=(d.label||'').trim(); const type=d.type==='file'?'file':'text';
-    if(!label) return json(res,400,{error:'Field label is required'});
-    const stageObj = (proj.stages||[]).find(x=>x.id===stageId); if(!stageObj) return json(res,404,{error:'stage not found'});
-    stageObj.fields = stageObj.fields || [];
-    stageObj.fields.push({ id:newFieldId(), label, type, value:'', origName:'' });
-    db.updates.unshift({ at:Date.now(), role:s.role, roleName:s.name, projectId:proj.id, projectName:proj.name, stage:proj.stage, text:`${s.name} added a ${type==='file'?'document':'field'} "${label}" to "${stageObj.name}" on ${proj.name}` });
-    db.updates = db.updates.slice(0,40);
-    saveDB();
-    return json(res,200,{ ok:true, project:proj, updates:db.updates.slice(0,15) });
-  }
-  if(p.startsWith('/api/projects/') && p.endsWith('/stage/field/remove') && req.method==='POST'){
-    const s=getSession(req); if(!s) return json(res,401,{error:'auth'});
-    if(!canEditProcess(s)) return json(res,403,{error:'Only the Supervisor or Managing Director can edit the process'});
-    const id=p.split('/')[3];
-    const proj=db.projects[id]; if(!proj) return json(res,404,{error:'not found'});
-    const body=await readBody(req); let d={}; try{d=JSON.parse(body)}catch{}
-    const stageId=(d.stageId||'').trim(); const fieldId=(d.fieldId||'').trim();
-    const stageObj = (proj.stages||[]).find(x=>x.id===stageId); if(!stageObj) return json(res,404,{error:'stage not found'});
-    stageObj.fields = (stageObj.fields||[]).filter(f=>f.id!==fieldId);
-    saveDB();
-    return json(res,200,{ ok:true, project:proj, updates:db.updates.slice(0,15) });
-  }
-  if(p.startsWith('/api/projects/') && p.endsWith('/stage/field/value') && req.method==='POST'){
-    const s=getSession(req); if(!s) return json(res,401,{error:'auth'});
-    const id=p.split('/')[3];
-    const proj=db.projects[id]; if(!proj) return json(res,404,{error:'not found'});
-    const body=await readBody(req); let d={}; try{d=JSON.parse(body)}catch{}
-    const stageId=(d.stageId||'').trim(); const fieldId=(d.fieldId||'').trim(); const value=(d.value||'').toString();
-    const stageObj = (proj.stages||[]).find(x=>x.id===stageId); if(!stageObj) return json(res,404,{error:'stage not found'});
-    if(!canTouchStage(s, proj, stageObj)) return json(res,403,{error:'This stage is not assigned to you'});
-    const field = (stageObj.fields||[]).find(f=>f.id===fieldId); if(!field) return json(res,404,{error:'field not found'});
-    field.value = value;
-    db.updates.unshift({ at:Date.now(), role:s.role, roleName:s.name, projectId:proj.id, projectName:proj.name, stage:proj.stage, text:`${s.name} filled "${field.label}" on ${proj.name}` });
-    db.updates = db.updates.slice(0,40);
-    saveDB();
-    return json(res,200,{ ok:true, project:proj, updates:db.updates.slice(0,15) });
-  }
-  if(p.startsWith('/api/projects/') && p.endsWith('/stage/field/upload') && req.method==='POST'){
-    const s=getSession(req); if(!s) return json(res,401,{error:'auth'});
-    const id=p.split('/')[3];
-    const proj=db.projects[id]; if(!proj) return json(res,404,{error:'not found'});
-    const ct = req.headers['content-type']||'';
-    const bm = ct.match(/boundary=(.+)$/);
-    if(!bm) return json(res,400,{error:'expected multipart/form-data'});
-    const buf = await readBodyBuffer(req);
-    const parts = parseMultipart(buf, bm[1]);
-    const field2 = name => { const pt=parts.find(x=>x.name===name); return pt ? pt.data.toString('utf8') : ''; };
-    const stageId = field2('stageId'), fieldId = field2('fieldId');
-    const filePart = parts.find(x=>x.name==='file' && x.filename);
-    const stageObj = (proj.stages||[]).find(x=>x.id===stageId); if(!stageObj) return json(res,400,{error:'invalid stage'});
-    if(!canTouchStage(s, proj, stageObj)) return json(res,403,{error:'This stage is not assigned to you'});
-    const field = (stageObj.fields||[]).find(f=>f.id===fieldId); if(!field) return json(res,400,{error:'invalid field'});
-    if(!filePart || !filePart.data.length) return json(res,400,{error:'No file provided'});
-    if(filePart.data.length > MAX_UPLOAD_BYTES) return json(res,413,{error:'File is too large (max 15MB)'});
-    const ext = path.extname(filePart.filename||'').toLowerCase();
-    if(!ALLOWED_UPLOAD_EXT.includes(ext)) return json(res,400,{error:`File type "${ext||'unknown'}" is not allowed. Use PDF, Word, Excel, or an image.`});
-    fs.mkdirSync(UPLOADS, {recursive:true});
-    const safeName = `${id}-${stageId}-${fieldId}-${Date.now()}${ext}`;
-    try{ fs.writeFileSync(path.join(UPLOADS, safeName), filePart.data); }
-    catch(e){ logError('upload-write', e); return json(res,500,{error:'Could not save the file — please try again.'}); }
-    field.value = safeName; field.origName = filePart.filename;
-    db.updates.unshift({ at:Date.now(), role:s.role, roleName:s.name, projectId:proj.id, projectName:proj.name, stage:proj.stage, text:`${s.name} uploaded "${filePart.filename}" for "${field.label}" on ${proj.name}` });
-    db.updates = db.updates.slice(0,40);
-    saveDB();
-    return json(res,200,{ ok:true, project:proj, updates:db.updates.slice(0,15) });
-  }
-  if(p.startsWith('/api/uploads/')){
-    const s=getSession(req); if(!s) return json(res,401,{error:'auth'});
-    const fname = decodeURIComponent(p.slice('/api/uploads/'.length));
-    const fp = path.join(UPLOADS, fname);
-    if(!fp.startsWith(UPLOADS) || !fs.existsSync(fp)) return send(res,404,'Not found');
-    return serveFile(res, fp);
-  }
-  if(p.startsWith('/api/projects/') && p.endsWith('/assign-module') && req.method==='POST'){
-    const s=getSession(req); if(!s) return json(res,401,{error:'auth'});
-    if(s.role!=='md') return json(res,403,{error:'Only the Managing Director can assign work areas'});
-    const id=p.split('/')[3];
-    const proj=db.projects[id]; if(!proj) return json(res,404,{error:'not found'});
-    const body=await readBody(req); let d={}; try{d=JSON.parse(body)}catch{}
-    const module=(d.module||'').trim(); const role=(d.role||'').trim();
-    if(!MODULES.includes(module)) return json(res,400,{error:'invalid module'});
-    if(role && !ROLE_NAME[role]) return json(res,400,{error:'invalid role'});
-    proj.moduleAssignees = proj.moduleAssignees || {};
-    proj.moduleAssignees[module] = role;
-    const text = role
-      ? `${s.name} assigned ${MODULE_LABEL[module]} on ${proj.name} to ${ROLE_NAME[role]}`
-      : `${s.name} unassigned ${MODULE_LABEL[module]} on ${proj.name}`;
-    db.updates.unshift({ at:Date.now(), role:s.role, roleName:s.name, projectId:proj.id, projectName:proj.name, stage:proj.stage, module, moduleRole:role, text });
-    db.updates = db.updates.slice(0,40);
-    saveDB();
-    return json(res,200,{ ok:true, project:proj, updates:db.updates.slice(0,15) });
-  }
-  if(p.startsWith('/api/projects/') && p.endsWith('/module-item/add') && req.method==='POST'){
-    const s=getSession(req); if(!s) return json(res,401,{error:'auth'});
-    const id=p.split('/')[3];
-    const proj=db.projects[id]; if(!proj) return json(res,404,{error:'not found'});
-    const body=await readBody(req); let d={}; try{d=JSON.parse(body)}catch{}
-    const module=(d.module||'').trim();
-    if(!['materials','payments','documents'].includes(module)) return json(res,400,{error:'invalid module'});
-    if(!canEditModule(s, proj, module)) return json(res,403,{error:'This work area is not assigned to you'});
-    const name=(d.name||'').trim(); if(!name) return json(res,400,{error:'name is required'});
-    const item = { name, status:'Pending' };
-    if(module==='payments'){ item.amount = (d.amount||'').trim() || '—'; }
-    if(module==='materials'){ item.qty=(d.qty||'').trim(); item.unit=(d.unit||'').trim(); item.note=(d.note||'').trim(); }
-    if(module==='documents'){ item.docType=(d.docType||'').trim(); item.note=(d.note||'').trim(); }
-    proj[module] = proj[module] || [];
-    proj[module].push(item);
-    db.updates.unshift({ at:Date.now(), role:s.role, roleName:s.name, projectId:proj.id, projectName:proj.name, stage:proj.stage, text:`${s.name} added to ${MODULE_LABEL[module]} on ${proj.name}: ${name}` });
-    db.updates = db.updates.slice(0,40);
-    saveDB();
-    return json(res,200,{ ok:true, project:proj, updates:db.updates.slice(0,15) });
-  }
-  if(p.startsWith('/api/projects/') && p.endsWith('/module-item/toggle') && req.method==='POST'){
-    const s=getSession(req); if(!s) return json(res,401,{error:'auth'});
-    const id=p.split('/')[3];
-    const proj=db.projects[id]; if(!proj) return json(res,404,{error:'not found'});
-    const body=await readBody(req); let d={}; try{d=JSON.parse(body)}catch{}
-    const module=(d.module||'').trim(); const idx=parseInt(d.idx,10);
-    if(!['materials','payments','documents'].includes(module)) return json(res,400,{error:'invalid module'});
-    if(!canEditModule(s, proj, module)) return json(res,403,{error:'This work area is not assigned to you'});
-    const item = proj[module] && proj[module][idx]; if(!item) return json(res,404,{error:'item not found'});
-    item.status = item.status==='Done' ? 'Pending' : 'Done';
-    db.updates.unshift({ at:Date.now(), role:s.role, roleName:s.name, projectId:proj.id, projectName:proj.name, stage:proj.stage, text:`${s.name} marked "${item.name}" ${item.status} on ${proj.name}` });
-    db.updates = db.updates.slice(0,40);
-    saveDB();
-    return json(res,200,{ ok:true, project:proj, updates:db.updates.slice(0,15) });
-  }
-  if(p.startsWith('/api/projects/') && p.endsWith('/po/create') && req.method==='POST'){
-    const s=getSession(req); if(!s) return json(res,401,{error:'auth'});
-    if(!canEditPO(s)) return json(res,403,{error:'Only the Supervisor or Managing Director can raise a purchase order'});
-    const id=p.split('/')[3];
-    const proj=db.projects[id]; if(!proj) return json(res,404,{error:'not found'});
-    const body=await readBody(req); let d={}; try{d=JSON.parse(body)}catch{}
-    const vendor = { name:(d.vendor&&d.vendor.name||'').trim(), address:(d.vendor&&d.vendor.address||'').trim(), phone:(d.vendor&&d.vendor.phone||'').trim(), email:(d.vendor&&d.vendor.email||'').trim() };
-    const shipTo = { name:(d.shipTo&&d.shipTo.name||'').trim(), address:(d.shipTo&&d.shipTo.address||'').trim(), phone:(d.shipTo&&d.shipTo.phone||'').trim(), email:(d.shipTo&&d.shipTo.email||'').trim() };
-    const items = Array.isArray(d.items) ? d.items
-      .map(it=>({ name:(it.name||'').trim(), desc:(it.desc||'').trim(), qty:Number(it.qty)||0, unitPrice:Number(it.unitPrice)||0 }))
-      .filter(it=>it.name) : [];
-    if(!vendor.name) return json(res,400,{error:'Vendor name is required'});
-    if(!items.length) return json(res,400,{error:'At least one item is required'});
-    const po = {
-      id: nextPoId(), vendor, shipTo, items,
-      requestNo:(d.requestNo||'').trim(), shipVia:(d.shipVia||'').trim(), fob:(d.fob||'').trim(), shippingTerms:(d.shippingTerms||'').trim(),
-      taxPercent:Number(d.taxPercent)||0, shippingFee:Number(d.shippingFee)||0,
-      status:'Draft', raisedBy:s.name, date:new Date().toLocaleDateString('en-GB',{day:'2-digit',month:'short',year:'numeric'})
+  const userRecord = await db.getUser(usernameInput);
+  if (userRecord && verifyPassword(passwordInput, userRecord.passHash)) {
+    const sid = crypto.randomBytes(16).toString('hex');
+    const csrf = crypto.randomBytes(24).toString('hex');
+    
+    const sess = {
+      user: usernameInput,
+      role: userRecord.role,
+      name: userRecord.name,
+      canGeneral: userRecord.canGeneral,
+      canSiteExecution: userRecord.canSiteExecution,
+      person: userRecord.person,
+      csrf,
+      createdAt: Date.now()
     };
-    proj.po = proj.po || [];
-    proj.po.push(po);
-    db.updates.unshift({ at:Date.now(), role:s.role, roleName:s.name, projectId:proj.id, projectName:proj.name, stage:proj.stage, text:`${s.name} raised ${po.id} on ${proj.name} — ${vendor.name}` });
-    db.updates = db.updates.slice(0,40);
-    saveDB();
-    const emailResult = await sendPoEmail(proj, po);
-    po.emailedTo = emailResult.sent ? vendor.email : null;
-    if(emailResult.sent){
-      db.updates.unshift({ at:Date.now(), role:s.role, roleName:s.name, projectId:proj.id, projectName:proj.name, stage:proj.stage, text:`${po.id} emailed to ${vendor.name} (${vendor.email})` });
-      db.updates = db.updates.slice(0,40);
-      saveDB();
-    }
-    return json(res,200,{ ok:true, project:proj, updates:db.updates.slice(0,15), email:emailResult });
-  }
-  if(p.match(/^\/api\/projects\/[^/]+\/po\/[^/]+\/pdf$/)){
-    const s=getSession(req); if(!s) return json(res,401,{error:'auth'});
-    const parts=p.split('/'); const id=parts[3]; const poId=parts[5];
-    const proj=db.projects[id]; if(!proj) return send(res,404,'Project not found');
-    const po=(proj.po||[]).find(x=>x.id===poId); if(!po) return send(res,404,'PO not found');
-    let pdfBuf;
-    try{ pdfBuf = poPdfBuffer(proj,po); }
-    catch(e){ logError('poPdfBuffer', e); return json(res,500,{error:'Could not generate the PDF right now — please try again.'}); }
-    return send(res,200,pdfBuf,{'Content-Type':'application/pdf','Content-Disposition':`attachment; filename="${po.id}.pdf"`});
-  }
-  if(p.startsWith('/api/projects/') && p.endsWith('/po/status') && req.method==='POST'){
-    const s=getSession(req); if(!s) return json(res,401,{error:'auth'});
-    if(!canEditPO(s)) return json(res,403,{error:'Only the Supervisor or Managing Director can update a purchase order'});
-    const id=p.split('/')[3];
-    const proj=db.projects[id]; if(!proj) return json(res,404,{error:'not found'});
-    const body=await readBody(req); let d={}; try{d=JSON.parse(body)}catch{}
-    const poId=(d.poId||'').trim();
-    const po = (proj.po||[]).find(x=>x.id===poId); if(!po) return json(res,404,{error:'PO not found'});
-    const curIdx = PO_STATUS.indexOf(po.status);
-    if(curIdx < PO_STATUS.length-1) po.status = PO_STATUS[curIdx+1];
-    db.updates.unshift({ at:Date.now(), role:s.role, roleName:s.name, projectId:proj.id, projectName:proj.name, stage:proj.stage, text:`${s.name} marked ${po.id} on ${proj.name} as ${po.status}` });
-    db.updates = db.updates.slice(0,40);
-    saveDB();
-    return json(res,200,{ ok:true, project:proj, updates:db.updates.slice(0,15) });
-  }
-  if(p.startsWith('/api/projects/') && p.endsWith('/notify') && req.method==='POST'){
-    const s=getSession(req); if(!s) return json(res,401,{error:'auth'});
-    const id=p.split('/')[3];
-    const proj=db.projects[id]; if(!proj) return json(res,404,{error:'not found'});
-    const body=await readBody(req); let d={}; try{d=JSON.parse(body)}catch{}
-    const curStage = (proj.stages||[])[proj.stage-1];
-    const message=(d.message||'').trim() || `Update on ${curStage?curStage.name:'current stage'}`;
-    db.updates.unshift({ at:Date.now(), role:s.role, roleName:s.name, projectId:proj.id, projectName:proj.name, stage:proj.stage, notify:true, text:`${s.name} notified the MD — ${proj.name}: ${message}` });
-    db.updates = db.updates.slice(0,40);
-    saveDB();
-    return json(res,200,{ ok:true, updates:db.updates.slice(0,15) });
-  }
-  if(p==='/api/reset' && req.method==='POST'){
-    const s=getSession(req); if(!s) return json(res,401,{error:'auth'});
-    seedProjects(); db.updates=[]; saveDB();
-    return json(res,200,{ok:true});
+    
+    await db.saveSession(sid, sess);
+    
+    res.cookie('sw_sid', sid, {
+      path: '/',
+      httpOnly: true,
+      maxAge: 24 * 60 * 60 * 1000,
+      sameSite: 'Lax',
+      secure: process.env.NODE_ENV === 'production'
+    });
+    
+    return res.json({ ok: true, role: sess.role, name: sess.name, csrf });
   }
 
-  // ---- Pages ----
-  if(p==='/login') return serveFile(res, path.join(PUB,'login.html'));
-  if(p==='/' || p==='/app' || p==='/team'){
-    const s=getSession(req);
-    if(!s){ res.writeHead(302,{Location:'/login'}); return res.end(); }
-    const file = s.role==='md' ? 'app.html' : 'team.html';
-    return serveFile(res, path.join(PUB, file));
+  return res.status(401).json({ error: 'Invalid username or password' });
+});
+
+// Logout Endpoint
+app.post('/api/logout', async (req, res) => {
+  const sid = req.cookies.sw_sid;
+  if (sid) {
+    await db.deleteSession(sid);
   }
+  res.clearCookie('sw_sid');
+  res.json({ ok: true });
+});
 
-  // ---- Static ----
-  const fp = path.join(PUB, p);
-  if(fp.startsWith(PUB) && fs.existsSync(fp) && fs.statSync(fp).isFile()) return serveFile(res, fp);
-  res.writeHead(302,{Location:'/'}); res.end();
-}
+app.use('/api', apiLimiter);
 
-// Every request goes through this wrapper — an error anywhere in handleRequest (bad input, a bug,
-// a body-too-large rejection) is caught here and turned into a clean HTTP response instead of
-// crashing the whole server. This is the single most important guard: without it, one unexpected
-// error in any request handler takes down every user's session, not just the one bad request.
-const server = http.createServer((req,res)=>{
-  handleRequest(req,res).catch(err=>{
-    logError(`request ${req.method} ${req.url}`, err);
-    if(res.headersSent) return;
-    const tooLarge = /too large/i.test(err && err.message || '');
-    try{ json(res, tooLarge?413:500, {error: tooLarge ? 'Request too large' : 'Something went wrong on our end — please try again.'}); }
-    catch{ /* if even the error response fails, give up quietly rather than throw again */ }
+// Get User session
+app.get('/api/me', (req, res) => {
+  if (!req.session) return res.status(401).json({ error: 'auth' });
+  res.json({
+    user: req.session.user,
+    role: req.session.role,
+    name: req.session.name,
+    canGeneral: req.session.canGeneral,
+    canSiteExecution: req.session.canSiteExecution,
+    person: req.session.person,
+    csrf: req.session.csrf
   });
 });
 
-server.listen(PORT, ()=>{
-  console.log(`\n  Sunworld Command Center (MVP) → http://localhost:${PORT}`);
-  console.log(`  MD login: admin / admin123`);
-  console.log(`  Site Manager login: sitemanager / sitemanager123 (sees only tasks assigned to "Site Manager")`);
-  console.log(`  Supervisor login: supervisor / supervisor123 (builds Stages 1-10 for any project; Site Execution still needs MD assignment)`);
-  console.log(`  Coordinator login: coordinator / coordinator123 (covers every stage except Site Execution, across all 5 services)\n`);
+// Get Projects list
+app.get('/api/projects', async (req, res) => {
+  if (!req.session) return res.status(401).json({ error: 'auth' });
+  res.json({
+    projects: await db.getProjectsList(),
+    updates: await db.getUpdatesList(15)
+  });
+});
+
+// Create Project
+app.post('/api/projects/create', async (req, res) => {
+  if (!req.session) return res.status(401).json({ error: 'auth' });
+  if (req.session.role !== 'md') return res.status(403).json({ error: 'Only the Managing Director can start a new project' });
+
+  const name = (req.body.name || '').trim();
+  const site = (req.body.site || '').trim();
+  const service = (req.body.service || '').trim();
+
+  if (!name || !site) return res.status(400).json({ error: 'Client name and site are required' });
+  if (!VALID_SERVICES.includes(service)) return res.status(400).json({ error: 'Invalid service' });
+
+  const id = await nextJobId();
+  const start = new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+  
+  const proj = Object.assign({
+    id, service, name, site,
+    tag: (req.body.tag || '').trim() || 'New project',
+    val: (req.body.val || '').trim() || '₹0.0 L',
+    team: 'Unassigned', start, delivery: (req.body.delivery || '').trim() || '—',
+    stage: 1, sub: 0, status: 'ok', note: '', assignees: {}, stages: defaultStages()
+  }, emptyModules());
+  
+  proj.pct = pctOf(proj);
+  await db.createProject(proj);
+
+  await db.addUpdate({
+    at: Date.now(),
+    role: req.session.role,
+    roleName: req.session.name,
+    projectId: id,
+    projectName: name,
+    stage: 1,
+    text: `${req.session.name} started a new project: ${name} — assign it to your team to begin`
+  });
+
+  res.json({
+    ok: true,
+    project: await db.getProject(id),
+    updates: await db.getUpdatesList(15)
+  });
+});
+
+// Advance Project stage
+app.post('/api/projects/:id/advance', async (req, res) => {
+  if (!req.session) return res.status(401).json({ error: 'auth' });
+  const id = req.params.id;
+  const proj = await db.getProject(id);
+  
+  if (!proj) return res.status(404).json({ error: 'Project not found' });
+  if (!canAdvanceStage(req.session, proj)) {
+    return res.status(403).json({ error: 'This task is not assigned to you, or your role cannot update this stage' });
+  }
+
+  await doAdvance(proj, req.session);
+
+  res.json({
+    ok: true,
+    project: await db.getProject(id),
+    updates: await db.getUpdatesList(15)
+  });
+});
+
+// Assign project team
+app.post('/api/projects/:id/assign', async (req, res) => {
+  if (!req.session) return res.status(401).json({ error: 'auth' });
+  if (req.session.role !== 'md') return res.status(403).json({ error: 'Only the Managing Director can assign teams' });
+
+  const id = req.params.id;
+  const proj = await db.getProject(id);
+  if (!proj) return res.status(404).json({ error: 'Project not found' });
+
+  const team = (req.body.team || '').trim();
+  if (!team) return res.status(400).json({ error: 'Team is required' });
+
+  await db.assignProjectTeam(id, team);
+
+  await db.addUpdate({
+    at: Date.now(),
+    role: req.session.role,
+    roleName: req.session.name,
+    projectId: proj.id,
+    projectName: proj.name,
+    stage: proj.stage,
+    text: `${req.session.name} assigned ${team} to ${proj.name}`
+  });
+
+  res.json({
+    ok: true,
+    project: await db.getProject(id),
+    updates: await db.getUpdatesList(15)
+  });
+});
+
+// Assign project stage person
+app.post('/api/projects/:id/assign-stage', async (req, res) => {
+  if (!req.session) return res.status(401).json({ error: 'auth' });
+  if (req.session.role !== 'md') return res.status(403).json({ error: 'Only the Managing Director can assign people to tasks' });
+
+  const id = req.params.id;
+  const proj = await db.getProject(id);
+  if (!proj) return res.status(404).json({ error: 'Project not found' });
+
+  const stageId = (req.body.stageId || '').trim();
+  const person = (req.body.person || '').trim();
+  const stageObj = (proj.stages || []).find(x => x.id === stageId);
+  if (!stageObj) return res.status(400).json({ error: 'Invalid stage' });
+
+  await db.assignProjectStagePerson(id, stageId, person);
+
+  await db.addUpdate({
+    at: Date.now(),
+    role: req.session.role,
+    roleName: req.session.name,
+    projectId: proj.id,
+    projectName: proj.name,
+    stage: proj.stage,
+    text: `${req.session.name} assigned ${person || 'no one'} to ${stageObj.name} on ${proj.name}`
+  });
+
+  res.json({
+    ok: true,
+    project: await db.getProject(id),
+    updates: await db.getUpdatesList(15)
+  });
+});
+
+// Add Stage
+app.post('/api/projects/:id/stage/add', async (req, res) => {
+  if (!req.session) return res.status(401).json({ error: 'auth' });
+  if (!canEditProcess(req.session)) return res.status(403).json({ error: 'Only the Supervisor or Managing Director can edit the process' });
+
+  const id = req.params.id;
+  const proj = await db.getProject(id);
+  if (!proj) return res.status(404).json({ error: 'Project not found' });
+
+  const name = (req.body.name || '').trim();
+  if (!name) return res.status(400).json({ error: 'Step name is required' });
+
+  const afterStageId = (req.body.afterStageId || '').trim();
+  const newStage = { id: newStageId(), name, desc: '', kind: null, fields: [] };
+  
+  let insertAt = proj.stages.length;
+  if (afterStageId === 'start') {
+    insertAt = 0;
+  } else if (afterStageId) {
+    const idx = proj.stages.findIndex(x => x.id === afterStageId);
+    if (idx >= 0) insertAt = idx + 1;
+  }
+
+  await db.addProjectStage(id, newStage, insertAt);
+
+  // Update projects current stage indicator if shifted
+  if (insertAt <= proj.stage - 1) {
+    await db.updateProjectProgress(id, proj.stage + 1, proj.sub, proj.status, proj.note, proj.pct);
+  }
+
+  await db.addUpdate({
+    at: Date.now(),
+    role: req.session.role,
+    roleName: req.session.name,
+    projectId: proj.id,
+    projectName: proj.name,
+    stage: proj.stage,
+    text: `${req.session.name} added a new step "${name}" to the process on ${proj.name}`
+  });
+
+  res.json({
+    ok: true,
+    project: await db.getProject(id),
+    updates: await db.getUpdatesList(15)
+  });
+});
+
+// Rename Stage
+app.post('/api/projects/:id/stage/rename', async (req, res) => {
+  if (!req.session) return res.status(401).json({ error: 'auth' });
+  if (!canEditProcess(req.session)) return res.status(403).json({ error: 'Only the Supervisor or Managing Director can edit the process' });
+
+  const id = req.params.id;
+  const proj = await db.getProject(id);
+  if (!proj) return res.status(404).json({ error: 'Project not found' });
+
+  const stageId = (req.body.stageId || '').trim();
+  const name = (req.body.name || '').trim();
+  if (!name) return res.status(400).json({ error: 'Name is required' });
+
+  const stageObj = (proj.stages || []).find(x => x.id === stageId);
+  if (!stageObj) return res.status(404).json({ error: 'Stage not found' });
+
+  const oldName = stageObj.name;
+  await db.renameProjectStage(id, stageId, name);
+
+  await db.addUpdate({
+    at: Date.now(),
+    role: req.session.role,
+    roleName: req.session.name,
+    projectId: proj.id,
+    projectName: proj.name,
+    stage: proj.stage,
+    text: `${req.session.name} renamed "${oldName}" to "${name}" on ${proj.name}`
+  });
+
+  res.json({
+    ok: true,
+    project: await db.getProject(id),
+    updates: await db.getUpdatesList(15)
+  });
+});
+
+// Add Field to Stage
+app.post('/api/projects/:id/stage/field/add', async (req, res) => {
+  if (!req.session) return res.status(401).json({ error: 'auth' });
+  if (!canEditProcess(req.session)) return res.status(403).json({ error: 'Only the Supervisor or Managing Director can edit the process' });
+
+  const id = req.params.id;
+  const proj = await db.getProject(id);
+  if (!proj) return res.status(404).json({ error: 'Project not found' });
+
+  const stageId = (req.body.stageId || '').trim();
+  const label = (req.body.label || '').trim();
+  const type = req.body.type === 'file' ? 'file' : 'text';
+  if (!label) return res.status(400).json({ error: 'Field label is required' });
+
+  const stageObj = (proj.stages || []).find(x => x.id === stageId);
+  if (!stageObj) return res.status(404).json({ error: 'Stage not found' });
+
+  const field = { id: newFieldId(), label, type, value: '', origName: '' };
+  await db.addStageField(id, stageId, field);
+
+  await db.addUpdate({
+    at: Date.now(),
+    role: req.session.role,
+    roleName: req.session.name,
+    projectId: proj.id,
+    projectName: proj.name,
+    stage: proj.stage,
+    text: `${req.session.name} added a ${type === 'file' ? 'document' : 'field'} "${label}" to "${stageObj.name}" on ${proj.name}`
+  });
+
+  res.json({
+    ok: true,
+    project: await db.getProject(id),
+    updates: await db.getUpdatesList(15)
+  });
+});
+
+// Remove Field from Stage
+app.post('/api/projects/:id/stage/field/remove', async (req, res) => {
+  if (!req.session) return res.status(401).json({ error: 'auth' });
+  if (!canEditProcess(req.session)) return res.status(403).json({ error: 'Only the Supervisor or Managing Director can edit the process' });
+
+  const id = req.params.id;
+  const proj = await db.getProject(id);
+  if (!proj) return res.status(404).json({ error: 'Project not found' });
+
+  const stageId = (req.body.stageId || '').trim();
+  const fieldId = (req.body.fieldId || '').trim();
+
+  await db.removeStageField(id, stageId, fieldId);
+
+  res.json({
+    ok: true,
+    project: await db.getProject(id),
+    updates: await db.getUpdatesList(15)
+  });
+});
+
+// Update Field Value
+app.post('/api/projects/:id/stage/field/value', async (req, res) => {
+  if (!req.session) return res.status(401).json({ error: 'auth' });
+  const id = req.params.id;
+  const proj = await db.getProject(id);
+  if (!proj) return res.status(404).json({ error: 'Project not found' });
+
+  const stageId = (req.body.stageId || '').trim();
+  const fieldId = (req.body.fieldId || '').trim();
+  const value = (req.body.value || '').toString();
+
+  const stageObj = (proj.stages || []).find(x => x.id === stageId);
+  if (!stageObj) return res.status(404).json({ error: 'Stage not found' });
+  if (!canTouchStage(req.session, proj, stageObj)) {
+    return res.status(403).json({ error: 'This stage is not assigned to you' });
+  }
+
+  await db.updateStageFieldValue(id, stageId, fieldId, value, '');
+
+  await db.addUpdate({
+    at: Date.now(),
+    role: req.session.role,
+    roleName: req.session.name,
+    projectId: proj.id,
+    projectName: proj.name,
+    stage: proj.stage,
+    text: `${req.session.name} filled "${stageObj.fields.find(f => f.id === fieldId)?.label || 'field'}" on ${proj.name}`
+  });
+
+  res.json({
+    ok: true,
+    project: await db.getProject(id),
+    updates: await db.getUpdatesList(15)
+  });
+});
+
+// File upload endpoint for stage fields
+app.post('/api/projects/:id/stage/field/upload', upload.single('file'), async (req, res) => {
+  if (!req.session) return res.status(401).json({ error: 'auth' });
+  const id = req.params.id;
+  const proj = await db.getProject(id);
+  if (!proj) return res.status(404).json({ error: 'Project not found' });
+
+  const stageId = req.body.stageId;
+  const fieldId = req.body.fieldId;
+  const file = req.file;
+
+  if (!file) return res.status(400).json({ error: 'No file uploaded or file rejected' });
+
+  const stageObj = (proj.stages || []).find(x => x.id === stageId);
+  if (!stageObj) return res.status(400).json({ error: 'Invalid stage' });
+  if (!canTouchStage(req.session, proj, stageObj)) {
+    return res.status(403).json({ error: 'This stage is not assigned to you' });
+  }
+
+  const field = (stageObj.fields || []).find(f => f.id === fieldId);
+  if (!field) return res.status(400).json({ error: 'Invalid field' });
+
+  // Update DB with the safe name generated by Multer
+  await db.updateStageFieldValue(id, stageId, fieldId, file.filename, file.originalname);
+
+  await db.addUpdate({
+    at: Date.now(),
+    role: req.session.role,
+    roleName: req.session.name,
+    projectId: proj.id,
+    projectName: proj.name,
+    stage: proj.stage,
+    text: `${req.session.name} uploaded "${file.originalname}" for "${field.label}" on ${proj.name}`
+  });
+
+  res.json({
+    ok: true,
+    project: await db.getProject(id),
+    updates: await db.getUpdatesList(15)
+  });
+});
+
+// Serve uploaded files securely
+app.get('/api/uploads/:fname', (req, res) => {
+  if (!req.session) return res.status(401).json({ error: 'auth' });
+  const fname = req.params.fname;
+  const fp = path.join(UPLOADS, fname);
+  
+  if (!fp.startsWith(UPLOADS) || !fs.existsSync(fp)) {
+    return res.status(404).send('File not found');
+  }
+  res.sendFile(fp);
+});
+
+// Assign Module Role
+app.post('/api/projects/:id/assign-module', async (req, res) => {
+  if (!req.session) return res.status(401).json({ error: 'auth' });
+  if (req.session.role !== 'md') return res.status(403).json({ error: 'Only the Managing Director can assign work areas' });
+
+  const id = req.params.id;
+  const proj = await db.getProject(id);
+  if (!proj) return res.status(404).json({ error: 'Project not found' });
+
+  const module = (req.body.module || '').trim();
+  const role = (req.body.role || '').trim();
+
+  if (!MODULES.includes(module)) return res.status(400).json({ error: 'Invalid module' });
+  if (role && !ROLE_NAME[role]) return res.status(400).json({ error: 'Invalid role' });
+
+  await db.assignProjectModuleRole(id, module, role);
+
+  const text = role
+    ? `${req.session.name} assigned ${MODULE_LABEL[module]} on ${proj.name} to ${ROLE_NAME[role]}`
+    : `${req.session.name} unassigned ${MODULE_LABEL[module]} on ${proj.name}`;
+
+  await db.addUpdate({
+    at: Date.now(),
+    role: req.session.role,
+    roleName: req.session.name,
+    projectId: proj.id,
+    projectName: proj.name,
+    stage: proj.stage,
+    module,
+    moduleRole: role,
+    text
+  });
+
+  res.json({
+    ok: true,
+    project: await db.getProject(id),
+    updates: await db.getUpdatesList(15)
+  });
+});
+
+// Add Item to Module (Materials/Payments/Documents)
+app.post('/api/projects/:id/module-item/add', async (req, res) => {
+  if (!req.session) return res.status(401).json({ error: 'auth' });
+  const id = req.params.id;
+  const proj = await db.getProject(id);
+  if (!proj) return res.status(404).json({ error: 'Project not found' });
+
+  const module = (req.body.module || '').trim();
+  if (!['materials', 'payments', 'documents'].includes(module)) return res.status(400).json({ error: 'Invalid module' });
+  if (!canEditModule(req.session, proj, module)) return res.status(403).json({ error: 'This work area is not assigned to you' });
+
+  const name = (req.body.name || '').trim();
+  if (!name) return res.status(400).json({ error: 'Name is required' });
+
+  const item = { name, status: 'Pending' };
+  if (module === 'payments') {
+    item.amount = (req.body.amount || '').trim() || '—';
+  }
+  if (module === 'materials') {
+    item.qty = (req.body.qty || '').trim();
+    item.unit = (req.body.unit || '').trim();
+    item.note = (req.body.note || '').trim();
+  }
+  if (module === 'documents') {
+    item.docType = (req.body.docType || '').trim();
+    item.note = (req.body.note || '').trim();
+  }
+
+  await db.addModuleItem(id, module, item);
+
+  await db.addUpdate({
+    at: Date.now(),
+    role: req.session.role,
+    roleName: req.session.name,
+    projectId: proj.id,
+    projectName: proj.name,
+    stage: proj.stage,
+    text: `${req.session.name} added to ${MODULE_LABEL[module]} on ${proj.name}: ${name}`
+  });
+
+  res.json({
+    ok: true,
+    project: await db.getProject(id),
+    updates: await db.getUpdatesList(15)
+  });
+});
+
+// Toggle Module Item Status
+app.post('/api/projects/:id/module-item/toggle', async (req, res) => {
+  if (!req.session) return res.status(401).json({ error: 'auth' });
+  const id = req.params.id;
+  const proj = await db.getProject(id);
+  if (!proj) return res.status(404).json({ error: 'Project not found' });
+
+  const module = (req.body.module || '').trim();
+  const idx = parseInt(req.body.idx, 10);
+  if (!['materials', 'payments', 'documents'].includes(module)) return res.status(400).json({ error: 'Invalid module' });
+  if (!canEditModule(req.session, proj, module)) return res.status(403).json({ error: 'This work area is not assigned to you' });
+
+  const itemsList = proj[module] || [];
+  const item = itemsList[idx];
+  if (!item) return res.status(404).json({ error: 'Item not found' });
+
+  await db.toggleModuleItem(id, module, idx);
+
+  const newStatus = item.status === 'Done' ? 'Pending' : 'Done';
+  await db.addUpdate({
+    at: Date.now(),
+    role: req.session.role,
+    roleName: req.session.name,
+    projectId: proj.id,
+    projectName: proj.name,
+    stage: proj.stage,
+    text: `${req.session.name} marked "${item.name}" ${newStatus} on ${proj.name}`
+  });
+
+  res.json({
+    ok: true,
+    project: await db.getProject(id),
+    updates: await db.getUpdatesList(15)
+  });
+});
+
+// Create Purchase Order
+app.post('/api/projects/:id/po/create', async (req, res) => {
+  if (!req.session) return res.status(401).json({ error: 'auth' });
+  if (!canEditPO(req.session)) return res.status(403).json({ error: 'Only the Supervisor or Managing Director can raise a purchase order' });
+
+  const id = req.params.id;
+  const proj = await db.getProject(id);
+  if (!proj) return res.status(404).json({ error: 'Project not found' });
+
+  const vendor = {
+    name: (req.body.vendor && req.body.vendor.name || '').trim(),
+    address: (req.body.vendor && req.body.vendor.address || '').trim(),
+    phone: (req.body.vendor && req.body.vendor.phone || '').trim(),
+    email: (req.body.vendor && req.body.vendor.email || '').trim()
+  };
+  const shipTo = {
+    name: (req.body.shipTo && req.body.shipTo.name || '').trim(),
+    address: (req.body.shipTo && req.body.shipTo.address || '').trim(),
+    phone: (req.body.shipTo && req.body.shipTo.phone || '').trim(),
+    email: (req.body.shipTo && req.body.shipTo.email || '').trim()
+  };
+  const items = Array.isArray(req.body.items) ? req.body.items
+    .map(it => ({ name: (it.name || '').trim(), desc: (it.desc || '').trim(), qty: Number(it.qty) || 0, unitPrice: Number(it.unitPrice) || 0 }))
+    .filter(it => it.name) : [];
+
+  if (!vendor.name) return res.status(400).json({ error: 'Vendor name is required' });
+  if (!items.length) return res.status(400).json({ error: 'At least one item is required' });
+
+  const po = {
+    id: await nextPoId(), vendor, shipTo, items,
+    requestNo: (req.body.requestNo || '').trim(),
+    shipVia: (req.body.shipVia || '').trim(),
+    fob: (req.body.fob || '').trim(),
+    shippingTerms: (req.body.shippingTerms || '').trim(),
+    taxPercent: Number(req.body.taxPercent) || 0,
+    shippingFee: Number(req.body.shippingFee) || 0,
+    status: 'Draft', raisedBy: req.session.name,
+    date: new Date().toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+  };
+
+  await db.createPurchaseOrder(id, po);
+
+  await db.addUpdate({
+    at: Date.now(),
+    role: req.session.role,
+    roleName: req.session.name,
+    projectId: proj.id,
+    projectName: proj.name,
+    stage: proj.stage,
+    text: `${req.session.name} raised ${po.id} on ${proj.name} — ${vendor.name}`
+  });
+
+  const emailResult = await sendPoEmail(proj, po);
+  if (emailResult.sent) {
+    await db.updatePurchaseOrderEmail(id, po.id, vendor.email);
+    await db.addUpdate({
+      at: Date.now(),
+      role: req.session.role,
+      roleName: req.session.name,
+      projectId: proj.id,
+      projectName: proj.name,
+      stage: proj.stage,
+      text: `${po.id} emailed to ${vendor.name} (${vendor.email})`
+    });
+  }
+
+  res.json({
+    ok: true,
+    project: await db.getProject(id),
+    updates: await db.getUpdatesList(15),
+    email: emailResult
+  });
+});
+
+// Serve Purchase Order PDF
+app.get('/api/projects/:id/po/:poId/pdf', async (req, res) => {
+  if (!req.session) return res.status(401).json({ error: 'auth' });
+  
+  const id = req.params.id;
+  const poId = req.params.poId;
+  const proj = await db.getProject(id);
+  if (!proj) return res.status(404).send('Project not found');
+
+  const po = (proj.po || []).find(x => x.id === poId);
+  if (!po) return res.status(404).send('PO not found');
+
+  try {
+    const pdfBuf = poPdfBuffer(proj, po);
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="${po.id}.pdf"`);
+    res.send(pdfBuf);
+  } catch (e) {
+    logError('poPdfBuffer', e);
+    res.status(500).json({ error: 'Could not generate the PDF right now — please try again.' });
+  }
+});
+
+// Update Purchase Order Status
+app.post('/api/projects/:id/po/status', async (req, res) => {
+  if (!req.session) return res.status(401).json({ error: 'auth' });
+  if (!canEditPO(req.session)) return res.status(403).json({ error: 'Only the Supervisor or Managing Director can update a purchase order' });
+
+  const id = req.params.id;
+  const proj = await db.getProject(id);
+  if (!proj) return res.status(404).json({ error: 'Project not found' });
+
+  const poId = (req.body.poId || '').trim();
+  const po = (proj.po || []).find(x => x.id === poId);
+  if (!po) return res.status(404).json({ error: 'PO not found' });
+
+  const curIdx = PO_STATUS.indexOf(po.status);
+  if (curIdx < PO_STATUS.length - 1) {
+    const nextStatus = PO_STATUS[curIdx + 1];
+    await db.updatePurchaseOrderStatus(id, poId, nextStatus);
+
+    await db.addUpdate({
+      at: Date.now(),
+      role: req.session.role,
+      roleName: req.session.name,
+      projectId: proj.id,
+      projectName: proj.name,
+      stage: proj.stage,
+      text: `${req.session.name} marked ${po.id} on ${proj.name} as ${nextStatus}`
+    });
+  }
+
+  res.json({
+    ok: true,
+    project: await db.getProject(id),
+    updates: await db.getUpdatesList(15)
+  });
+});
+
+// Notify MD
+app.post('/api/projects/:id/notify', async (req, res) => {
+  if (!req.session) return res.status(401).json({ error: 'auth' });
+  const id = req.params.id;
+  const proj = await db.getProject(id);
+  if (!proj) return res.status(404).json({ error: 'Project not found' });
+
+  const curStage = (proj.stages || [])[proj.stage - 1];
+  const message = (req.body.message || '').trim() || `Update on ${curStage ? curStage.name : 'current stage'}`;
+
+  await db.addUpdate({
+    at: Date.now(),
+    role: req.session.role,
+    roleName: req.session.name,
+    projectId: proj.id,
+    projectName: proj.name,
+    stage: proj.stage,
+    notify: true,
+    text: `${req.session.name} notified the MD — ${proj.name}: ${message}`
+  });
+
+  res.json({
+    ok: true,
+    updates: await db.getUpdatesList(15)
+  });
+});
+
+// Reset database seeds
+app.post('/api/reset', async (req, res) => {
+  if (!req.session) return res.status(401).json({ error: 'auth' });
+  await db.clearAllProjects();
+  res.json({ ok: true });
+});
+
+// Catch-all route -> redirect to home
+app.use((req, res) => {
+  res.redirect('/');
+});
+
+// Global error handler
+app.use((err, req, res, next) => {
+  logError(`express-request ${req.method} ${req.url}`, err);
+  if (res.headersSent) return;
+  
+  const tooLarge = /too large|file size/i.test(err.message || '');
+  res.status(tooLarge ? 413 : 500).json({
+    error: tooLarge
+      ? 'Upload file or request body is too large (max 15MB for files, 2MB for JSON)'
+      : err.message || 'Something went wrong on our end — please try again.'
+  });
+});
+
+app.listen(PORT, () => {
+  console.log(`\n  Sunworld Command Center (Production-Ready) → http://localhost:${PORT}`);
+  console.log(`  MD login: admin / bkvOoWz7X4W1`);
+  console.log(`  Site Manager login: sitemanager / GZlKtXGYlwOx`);
+  console.log(`  Supervisor login: supervisor / Ju4vvM9eXdw3`);
+  console.log(`  Coordinator login: coordinator / 4VDzCzCyJ0C\n`);
 });
