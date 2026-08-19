@@ -1242,12 +1242,19 @@ app.use((err, req, res, next) => {
   });
 });
 
-app.listen(PORT, () => {
-  console.log(`\n  Sunworld Command Center (Production-Ready) → http://localhost:${PORT}`);
-  // These reflect the ACTUAL seeded passwords (env var override, else the fallback literal below) —
-  // previously this banner printed unrelated hardcoded strings that never matched a real login.
-  console.log(`  MD login: admin / ${process.env.ADMIN_PASSWORD || 'admin123'}`);
-  console.log(`  Site Manager login: sitemanager / ${process.env.SITEMANAGER_PASSWORD || 'sitemanager123'}`);
-  console.log(`  Supervisor login: supervisor / ${process.env.SUPERVISOR_PASSWORD || 'supervisor123'}`);
-  console.log(`  Coordinator login: coordinator / ${process.env.COORDINATOR_PASSWORD || 'coordinator123'}\n`);
-});
+// On Vercel, this file is loaded as a serverless function handler (see vercel.json) — it must
+// export `app` and must NOT call app.listen(), since Vercel's runtime owns the actual HTTP server.
+// Locally (or on Railway/Render/etc.), VERCEL is unset, so we start a normal persistent server.
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    console.log(`\n  Sunworld Command Center (Production-Ready) → http://localhost:${PORT}`);
+    // These reflect the ACTUAL seeded passwords (env var override, else the fallback literal below) —
+    // previously this banner printed unrelated hardcoded strings that never matched a real login.
+    console.log(`  MD login: admin / ${process.env.ADMIN_PASSWORD || 'admin123'}`);
+    console.log(`  Site Manager login: sitemanager / ${process.env.SITEMANAGER_PASSWORD || 'sitemanager123'}`);
+    console.log(`  Supervisor login: supervisor / ${process.env.SUPERVISOR_PASSWORD || 'supervisor123'}`);
+    console.log(`  Coordinator login: coordinator / ${process.env.COORDINATOR_PASSWORD || 'coordinator123'}\n`);
+  });
+}
+
+module.exports = app;
