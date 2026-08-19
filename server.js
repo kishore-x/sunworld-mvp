@@ -481,6 +481,10 @@ setInterval(async () => {
   }
 }, 60 * 60 * 1000);
 
+// ---- STATIC ASSETS ---- (logo, background photos, etc. — this was missing entirely, so every
+// <img> on the login/app/team pages was 404ing)
+app.use(express.static(PUB));
+
 // ---- PAGE ROUTES ----
 app.get('/login', (req, res) => {
   res.sendFile(path.join(PUB, 'login.html'));
@@ -1240,8 +1244,10 @@ app.use((err, req, res, next) => {
 
 app.listen(PORT, () => {
   console.log(`\n  Sunworld Command Center (Production-Ready) → http://localhost:${PORT}`);
-  console.log(`  MD login: admin / bkvOoWz7X4W1`);
-  console.log(`  Site Manager login: sitemanager / GZlKtXGYlwOx`);
-  console.log(`  Supervisor login: supervisor / Ju4vvM9eXdw3`);
-  console.log(`  Coordinator login: coordinator / 4VDzCzCyJ0C\n`);
+  // These reflect the ACTUAL seeded passwords (env var override, else the fallback literal below) —
+  // previously this banner printed unrelated hardcoded strings that never matched a real login.
+  console.log(`  MD login: admin / ${process.env.ADMIN_PASSWORD || 'admin123'}`);
+  console.log(`  Site Manager login: sitemanager / ${process.env.SITEMANAGER_PASSWORD || 'sitemanager123'}`);
+  console.log(`  Supervisor login: supervisor / ${process.env.SUPERVISOR_PASSWORD || 'supervisor123'}`);
+  console.log(`  Coordinator login: coordinator / ${process.env.COORDINATOR_PASSWORD || 'coordinator123'}\n`);
 });
