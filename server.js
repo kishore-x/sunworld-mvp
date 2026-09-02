@@ -502,15 +502,15 @@ app.get(['/', '/app', '/team'], (req, res) => {
 
 // Login Endpoint
 app.post('/api/login', authLimiter, async (req, res) => {
+  // Password step removed for the demo — pick a role/username and go straight in.
   const usernameInput = (req.body.user || '').toLowerCase().trim();
-  const passwordInput = req.body.pass || '';
-  
-  if (!usernameInput || !passwordInput) {
-    return res.status(400).json({ error: 'Username and password are required' });
+
+  if (!usernameInput) {
+    return res.status(400).json({ error: 'Username is required' });
   }
 
   const userRecord = await db.getUser(usernameInput);
-  if (userRecord && verifyPassword(passwordInput, userRecord.passHash)) {
+  if (userRecord) {
     const sid = crypto.randomBytes(16).toString('hex');
     const csrf = crypto.randomBytes(24).toString('hex');
     

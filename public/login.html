@@ -109,23 +109,19 @@
       <div class="eyebrow">Management Console</div>
       <h3>Sign in</h3>
       <div class="sub">Access your project command center.</div>
-      <div class="err" id="err">Invalid username or password.</div>
+      <div class="err" id="err">Unknown user.</div>
       <div class="field">
         <label for="user">Username</label>
         <input id="user" autocomplete="username" value="admin" autofocus>
       </div>
-      <div class="field">
-        <label for="pass">Password</label>
-        <input id="pass" type="password" autocomplete="current-password" value="admin123">
-      </div>
       <button class="go" type="submit">Sign in</button>
       <div class="quick">
-        <div class="qlab">Quick login (demo) — tap a role, then Sign in</div>
+        <div class="qlab">Quick login (demo) — tap a role to sign in instantly</div>
         <div class="qchips">
-          <span class="qchip md" onclick="fill('admin','admin123')">Managing Director</span>
-          <span class="qchip" onclick="fill('sitemanager','sitemanager123')">Site Manager</span>
-          <span class="qchip" onclick="fill('supervisor','supervisor123')">Supervisor (builds the plan)</span>
-          <span class="qchip" onclick="fill('coordinator','coordinator123')">Coordinator</span>
+          <span class="qchip md" onclick="quickLogin('admin')">Managing Director</span>
+          <span class="qchip" onclick="quickLogin('sitemanager')">Site Manager</span>
+          <span class="qchip" onclick="quickLogin('supervisor')">Supervisor (builds the plan)</span>
+          <span class="qchip" onclick="quickLogin('coordinator')">Coordinator</span>
         </div>
       </div>
     </form>
@@ -174,17 +170,19 @@
   setTimeout(playChime, 100);
   document.addEventListener('click', playChime, {once:false});
 })();
-function fill(u,p){ document.getElementById('user').value=u; document.getElementById('pass').value=p; document.getElementById('err').style.display='none'; }
-async function login(e){
-  e.preventDefault();
-  const user=document.getElementById('user').value;
-  const pass=document.getElementById('pass').value;
+async function doLogin(user){
   const err=document.getElementById('err');
   try{
-    const r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user,pass})});
+    const r=await fetch('/api/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({user})});
     if(r.ok){ location.href='/'; }
     else { err.style.display='block'; }
   }catch{ err.textContent='Could not reach server.'; err.style.display='block'; }
+}
+function quickLogin(u){ document.getElementById('user').value=u; doLogin(u); }
+async function login(e){
+  e.preventDefault();
+  document.getElementById('err').style.display='none';
+  await doLogin(document.getElementById('user').value);
   return false;
 }
 </script>
