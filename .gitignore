@@ -2,11 +2,7 @@ node_modules/
 db.json
 db.json.tmp
 db.json.bak*
-db.json.migrated
 uploads/
 logs/
-scratch/
 .DS_Store
 *.log
-.env
-sunworld.db
