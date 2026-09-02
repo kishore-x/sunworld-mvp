@@ -778,11 +778,30 @@ const server = http.createServer((req,res)=>{
   });
 });
 
-server.listen(PORT, ()=>{
-  console.log(`\n  Sunworld Command Center (MVP) → http://localhost:${PORT}`);
-  console.log(`  No password needed — sign in with just a username:`);
-  console.log(`  MD login: admin`);
-  console.log(`  Site Manager login: sitemanager (sees only tasks assigned to "Site Manager")`);
-  console.log(`  Supervisor login: supervisor (builds Stages 1-10 for any project; Site Execution still needs MD assignment)`);
-  console.log(`  Coordinator login: coordinator (covers every stage except Site Execution, across all 5 services)\n`);
-});
+// On Vercel this file is loaded as a serverless function (see vercel.json) — it must export a
+// (req,res) handler and must NOT call .listen(), since Vercel's runtime owns the actual HTTP
+// server. Locally (or on Railway/Render/etc), VERCEL is unset, so a normal persistent server starts.
+// IMPORTANT caveat for Vercel specifically: the in-memory `db` above is per-instance — serverless
+// platforms can route different requests to different warm instances, so data created by one
+// request may not be visible to another. Fine for exercising a single flow in one sitting; for a
+// real multi-person live demo, a persistent host (Railway/Render) or a real database is required.
+if(!process.env.VERCEL){
+  server.listen(PORT, ()=>{
+    console.log(`\n  Sunworld Command Center (MVP) → http://localhost:${PORT}`);
+    console.log(`  No password needed — sign in with just a username:`);
+    console.log(`  MD login: admin`);
+    console.log(`  Site Manager login: sitemanager (sees only tasks assigned to "Site Manager")`);
+    console.log(`  Supervisor login: supervisor (builds Stages 1-10 for any project; Site Execution still needs MD assignment)`);
+    console.log(`  Coordinator login: coordinator (covers every stage except Site Execution, across all 5 services)\n`);
+  });
+}
+
+module.exports = (req, res) => {
+  handleRequest(req,res).catch(err=>{
+    logError(`request ${req.method} ${req.url}`, err);
+    if(res.headersSent) return;
+    const tooLarge = /too large/i.test(err && err.message || '');
+    try{ json(res, tooLarge?413:500, {error: tooLarge ? 'Request too large' : 'Something went wrong on our end — please try again.'}); }
+    catch{}
+  });
+};
